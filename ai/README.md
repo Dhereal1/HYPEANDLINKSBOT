@@ -2,22 +2,19 @@
 
 FastAPI backend for AI chat using Ollama. This is the backend-only branch for Railway deployment.
 
+**Ollama is installed directly in the Railway container** - no external setup needed!
+
 ## Setup
-
-### Backend (Railway)
-
-1. Install Ollama locally: https://ollama.com
-2. Pull a model: `ollama pull llama2`
-3. Start Ollama: `ollama serve`
 
 ### Deploy to Railway
 
 1. Connect your GitHub repo to Railway
-2. Railway will auto-detect the Python app
-3. Set environment variables:
-   - `OLLAMA_URL`: Your Ollama server URL (or use ngrok for local)
-   - `OLLAMA_MODEL`: Model name (default: "llama2")
+2. Railway will auto-detect the Dockerfile and build
+3. Optional environment variables:
+   - `OLLAMA_MODEL`: Model name to use (default: "llama2")
    - `PORT`: Railway sets this automatically
+
+**Note:** The first deployment will take longer as it downloads and installs Ollama and pulls the AI model (2-7GB depending on model). Subsequent deployments are faster.
 
 ### Local Development
 

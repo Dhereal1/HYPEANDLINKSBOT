@@ -1,13 +1,13 @@
-# XP7K Bot - Monorepo
+# xp7k
 
-This is a monorepo containing multiple services for the XP7K Telegram Mini App project.
+This is a monorepo containing multiple services.
 
 ## Repository Structure
 
 ```
 xp7kbot/
-├── front/          # Flutter frontend (Telegram Mini App)
-├── backend/        # Train server (AI chat backend) - TODO
+├── front/          # Flutter frontend
+├── ai/             # AI chat backend (FastAPI + Ollama)
 ├── rag/            # RAG server (TON data RAG system) - TODO
 └── railway.json    # Root Railway configuration for monorepo
 ```
@@ -19,10 +19,11 @@ xp7kbot/
 - **Purpose**: Telegram Mini App UI
 - **Deployment**: Railway (configured in `front/railway.json`)
 
-### Backend (`backend/`)
+### AI Service (`ai/`)
 - **Technology**: FastAPI + Ollama
 - **Purpose**: AI chat API
-- **Status**: To be added from train repository
+- **Deployment**: Railway (configured in `ai/railway.json`)
+- **Status**: ✅ Active (merged from train branch)
 
 ### RAG Server (`rag/`)
 - **Technology**: FastAPI + Vector DB + TON SDK

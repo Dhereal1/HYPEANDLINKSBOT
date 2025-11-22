@@ -23,3 +23,5 @@ if __name__ == "__main__":
     print(f"\nOr for Windows:")
     print(f"set API_KEY={api_key}")
 
+
+

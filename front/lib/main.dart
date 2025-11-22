@@ -261,6 +261,19 @@ class _HomePageState extends State<HomePage> {
   static const String _tonAddress =
       '0:0000000000000000000000000000000000000000000000000000000000000000';
   static const String _chartApiUrl = 'https://api.dyor.io';
+  static const String _swapCoffeeApiUrl = 'https://backend.swap.coffee';
+  // USDT contract address on TON blockchain
+  static const String _usdtAddress =
+      'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs';
+
+  // Swap state variables
+  final String _buyCurrency = 'TON';
+  final double _buyAmount = 1.0; // Default: 1 TON
+  final String _sellCurrency = 'USDT';
+  double? _sellAmount; // Will be fetched from API
+  bool _isLoadingSwapAmount = false;
+  String? _usdtTokenAddress; // Will be fetched from API if needed
+  String? _swapAmountError; // Error message if fetch fails
 
   // Resolution mapping: button -> API value
   static const Map<String, String> _resolutionMap = {
@@ -441,6 +454,8 @@ class _HomePageState extends State<HomePage> {
 
     // Fetch chart data on page load
     _fetchChartData();
+    // Fetch swap amount on page load
+    _fetchSwapAmount();
   }
 
   Future<void> _fetchChartData() async {
@@ -584,6 +599,130 @@ class _HomePageState extends State<HomePage> {
         _isLoadingChart = false;
       });
       print('Chart fetch error: $e');
+    }
+  }
+
+  Future<void> _fetchSwapAmount() async {
+    setState(() {
+      _isLoadingSwapAmount = true;
+      _swapAmountError = null;
+    });
+
+    try {
+      // First, try to get USDT token address from API
+      String usdtAddress = _usdtAddress;
+      if (_usdtTokenAddress != null) {
+        usdtAddress = _usdtTokenAddress!;
+      } else {
+        // Try to fetch USDT token from tokens list
+        try {
+          final tokenUri = Uri.parse('$_swapCoffeeApiUrl/v1/tokens/ton');
+          final tokenResponse = await http.get(tokenUri);
+          print('Token list response status: ${tokenResponse.statusCode}');
+          if (tokenResponse.statusCode == 200) {
+            final tokenData = jsonDecode(tokenResponse.body);
+            print('Token list response: $tokenData');
+            // The response might be a list or an object
+            if (tokenData is List) {
+              // Find USDT in the list
+              for (var token in tokenData) {
+                if (token is Map &&
+                    (token['symbol'] as String?)?.toUpperCase() == 'USDT') {
+                  final address = token['address'] as String?;
+                  if (address != null) {
+                    usdtAddress = address;
+                    _usdtTokenAddress = address;
+                    print('Found USDT address from token list: $usdtAddress');
+                    break;
+                  }
+                }
+              }
+            } else if (tokenData is Map) {
+              // Check if it's a single token object
+              if ((tokenData['symbol'] as String?)?.toUpperCase() == 'USDT') {
+                final address = tokenData['address'] as String?;
+                if (address != null) {
+                  usdtAddress = address;
+                  _usdtTokenAddress = address;
+                  print('Found USDT address from API: $usdtAddress');
+                }
+              }
+            }
+          } else {
+            print('Token list fetch failed: ${tokenResponse.statusCode}');
+            print('Response: ${tokenResponse.body}');
+          }
+        } catch (e) {
+          print('Could not fetch USDT token address, using default: $e');
+        }
+      }
+
+      final uri = Uri.parse('$_swapCoffeeApiUrl/v1/route/smart');
+
+      // User wants to buy 1 TON, so we need to find how much USDT to pay
+      // Input: USDT, Output: 1 TON
+      final requestBody = {
+        'input_token': {
+          'blockchain': 'ton',
+          'address': usdtAddress, // USDT token address
+        },
+        'output_token': {
+          'blockchain': 'ton',
+          'address': 'native', // TON native token
+        },
+        'output_amount': _buyAmount, // 1 TON (what we want to receive)
+        'max_splits': 4,
+      };
+
+      print('Fetching swap amount with request: ${jsonEncode(requestBody)}');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      print('Swap API response status: ${response.statusCode}');
+      print('Swap API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Parsed response data: $data');
+
+        // input_amount is how much USDT we need to pay
+        final inputAmount = data['input_amount'] as num?;
+
+        if (inputAmount != null) {
+          print('Found input_amount: $inputAmount');
+          setState(() {
+            _sellAmount = inputAmount.toDouble();
+            _isLoadingSwapAmount = false;
+          });
+        } else {
+          print(
+              'No input_amount in response. Available keys: ${data.keys.toList()}');
+          setState(() {
+            _isLoadingSwapAmount = false;
+            _swapAmountError = 'Invalid response format';
+          });
+        }
+      } else {
+        print('Swap amount fetch failed: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        setState(() {
+          _isLoadingSwapAmount = false;
+          _swapAmountError = 'Failed to fetch: ${response.statusCode}';
+        });
+      }
+    } catch (e, stackTrace) {
+      print('Error fetching swap amount: $e');
+      print('Stack trace: $stackTrace');
+      setState(() {
+        _isLoadingSwapAmount = false;
+        _swapAmountError = 'Network error';
+      });
     }
   }
 
@@ -1172,8 +1311,12 @@ class _HomePageState extends State<HomePage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Text('1',
-                                    style: TextStyle(
+                                Text(
+                                    _buyAmount
+                                        .toStringAsFixed(6)
+                                        .replaceAll(RegExp(r'0+$'), '')
+                                        .replaceAll(RegExp(r'\.$'), ''),
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 20,
                                       color: Color(0xFFE4E4E4),
@@ -1187,8 +1330,8 @@ class _HomePageState extends State<HomePage> {
                                         height: 20,
                                         fit: BoxFit.contain),
                                     const SizedBox(width: 8),
-                                    const Text('ton',
-                                        style: TextStyle(
+                                    Text(_buyCurrency.toLowerCase(),
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.w300,
                                           color: Color(0xFFE4E4E4),
                                           fontSize: 20,
@@ -1293,8 +1436,20 @@ class _HomePageState extends State<HomePage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Text('1',
-                                    style: TextStyle(
+                                Text(
+                                    _isLoadingSwapAmount
+                                        ? '...'
+                                        : (_swapAmountError != null
+                                            ? 'Error'
+                                            : (_sellAmount != null
+                                                ? _sellAmount!
+                                                    .toStringAsFixed(6)
+                                                    .replaceAll(
+                                                        RegExp(r'0+$'), '')
+                                                    .replaceAll(
+                                                        RegExp(r'\.$'), '')
+                                                : '1')),
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 20,
                                       color: Color(0xFFE4E4E4),
@@ -1308,8 +1463,8 @@ class _HomePageState extends State<HomePage> {
                                         height: 20,
                                         fit: BoxFit.contain),
                                     const SizedBox(width: 8),
-                                    const Text('usdt',
-                                        style: TextStyle(
+                                    Text(_sellCurrency.toLowerCase(),
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.w300,
                                           color: Color(0xFFE4E4E4),
                                           fontSize: 20,

@@ -7,6 +7,61 @@ import 'dart:math' as math;
 import 'dart:js' as js;
 import 'analytics.dart';
 
+// Theme helper class
+class AppTheme {
+  static bool get isLightTheme {
+    final theme = dotenv.env['THEME']?.toLowerCase();
+    return theme == 'light' || theme == 'white';
+  }
+
+  static bool get isDarkTheme => !isLightTheme;
+
+  // Base colors for dark theme (black variations)
+  static const List<Color> darkBaseColors = [
+    Color(0xFF010101),
+    Color(0xFF010102),
+    Color(0xFF010103),
+    Color(0xFF010104),
+    Color(0xFF010105),
+    Color(0xFF010106),
+  ];
+
+  // Base colors for light theme (white variations)
+  static const List<Color> lightBaseColors = [
+    Color(0xFFFFFFFE),
+    Color(0xFFFFFFFD),
+    Color(0xFFFFFFFC),
+    Color(0xFFFFFFFB),
+    Color(0xFFFFFFFA),
+    Color(0xFFFFFFF9),
+  ];
+
+  static List<Color> get baseColors =>
+      isLightTheme ? lightBaseColors : darkBaseColors;
+
+  static Color get backgroundColor =>
+      isLightTheme ? Colors.white : Colors.black;
+
+  static Color get textColor => isLightTheme ? Colors.black : Colors.white;
+
+  static Color get chartLineColor => isLightTheme ? Colors.black : Colors.white;
+
+  static Color get dotFillColor => isLightTheme ? Colors.white : Colors.black;
+
+  static Color get dotStrokeColor => isLightTheme ? Colors.black : Colors.white;
+
+  static Color get buttonBackgroundColor =>
+      isLightTheme ? Colors.black : Colors.white;
+
+  static Color get buttonTextColor =>
+      isLightTheme ? Colors.white : Colors.black;
+
+  static Color get radialGradientColor =>
+      isLightTheme ? const Color(0xFFFFFFFF) : const Color(0xFF06050A);
+
+  static Color get overlayColor => isLightTheme ? Colors.white : Colors.black;
+}
+
 class DiagonalLinePainter extends CustomPainter {
   final List<double>? dataPoints; // Optional: for real data later
   final int? selectedPointIndex;
@@ -21,7 +76,7 @@ class DiagonalLinePainter extends CustomPainter {
     if (dataPoints == null || dataPoints!.isEmpty) return;
 
     final paint = Paint()
-      ..color = const Color(0xFFFFFFFF)
+      ..color = AppTheme.chartLineColor
       ..strokeWidth = 1.33
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -111,15 +166,15 @@ class DiagonalLinePainter extends CustomPainter {
         Radius.zero,
       );
 
-      // Draw black fill
+      // Draw fill
       final fillPaint = Paint()
-        ..color = Colors.black
+        ..color = AppTheme.dotFillColor
         ..style = PaintingStyle.fill;
       canvas.drawRRect(squareRect, fillPaint);
 
-      // Draw white stroke
+      // Draw stroke
       final strokePaint = Paint()
-        ..color = Colors.white
+        ..color = AppTheme.dotStrokeColor
         ..strokeWidth = 1.33
         ..style = PaintingStyle.stroke;
       canvas.drawRRect(squareRect, strokePaint);
@@ -170,96 +225,96 @@ class _MyAppState extends State<MyApp> {
       // Use default theme without Material fonts to avoid loading errors
       theme: ThemeData(
         useMaterial3: false,
-        scaffoldBackgroundColor: Colors.black,
+        scaffoldBackgroundColor: AppTheme.backgroundColor,
         fontFamily: 'Aeroport',
-        textTheme: const TextTheme(
+        textTheme: TextTheme(
           bodyLarge: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           bodyMedium: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           bodySmall: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           displayLarge: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           displayMedium: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           displaySmall: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           headlineLarge: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           headlineMedium: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           headlineSmall: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           titleLarge: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           titleMedium: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           titleSmall: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           labelLarge: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           labelMedium: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           labelSmall: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
         ),
-        inputDecorationTheme: const InputDecorationTheme(
+        inputDecorationTheme: InputDecorationTheme(
           labelStyle: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
           hintStyle: TextStyle(
               fontFamily: 'Aeroport',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.white),
+              color: AppTheme.textColor),
         ),
       ),
       debugShowCheckedModeBanner: false,
@@ -1663,14 +1718,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           final marketFactor =
               ((_priceChange24h ?? 0).abs() / 100).clamp(0.0, 0.008);
           final shimmer = (0.007 + marketFactor * 0.4) * baseShimmer;
-          const baseColors = [
-            Color(0xFF010101),
-            Color(0xFF010102),
-            Color(0xFF010103),
-            Color(0xFF010104),
-            Color(0xFF010105),
-            Color(0xFF010106),
-          ];
+          final baseColors = AppTheme.baseColors;
           const stopsCount = 28;
           final colors = List.generate(stopsCount, (index) {
             final progress = index / (stopsCount - 1);
@@ -1733,12 +1781,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     center: const Alignment(0.7, -0.6),
                     radius: 0.8,
                     colors: [
-                      _shiftColor(const Color(0xFF06050A), shimmer * 0.4),
+                      _shiftColor(AppTheme.radialGradientColor, shimmer * 0.4),
                       Colors.transparent,
                     ],
                     stops: const [0.0, 1.0],
                   ),
-                  color: Colors.black.withOpacity(0.02),
+                  color: AppTheme.overlayColor.withOpacity(0.02),
                 ),
               ),
               IgnorePointer(
@@ -1773,7 +1821,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.only(
                       top: 30, bottom: 15, left: 15, right: 15),
                   child: SvgPicture.asset(
-                    'assets/images/logo.svg',
+                    AppTheme.isLightTheme
+                        ? 'assets/images/logo_light.svg'
+                        : 'assets/images/logo_dark.svg',
                     width: 30,
                     height: 30,
                   ),
@@ -1806,10 +1856,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 }
                               });
                             },
-                            child: const MouseRegion(
+                            child: MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: Padding(
-                                padding: EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                     vertical: 5.0, horizontal: 15.0),
                                 child: Text(
                                   'What is my all wallet\'s last month profit',
@@ -1817,7 +1867,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     fontFamily: 'Aeroport',
                                     fontSize: 15,
                                     fontWeight: FontWeight.w400,
-                                    color: Colors.white,
+                                    color: AppTheme.textColor,
                                   ),
                                 ),
                               ),
@@ -1844,10 +1894,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 }
                               });
                             },
-                            child: const MouseRegion(
+                            child: MouseRegion(
                               cursor: SystemMouseCursors.click,
                               child: Padding(
-                                padding: EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                     vertical: 5.0, horizontal: 15.0),
                                 child: Text(
                                   'Advise me a token to buy',
@@ -1855,7 +1905,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     fontFamily: 'Aeroport',
                                     fontSize: 15,
                                     fontWeight: FontWeight.w400,
-                                    color: Colors.white,
+                                    color: AppTheme.textColor,
                                   ),
                                 ),
                               ),
@@ -1883,20 +1933,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Text('Toncoin',
+                                          Text('Toncoin',
                                               style: TextStyle(
-                                                fontWeight: FontWeight.w300,
-                                                color: Color.fromARGB(
-                                                    255, 255, 255, 255),
+                                                fontWeight: FontWeight.w400,
+                                                color: AppTheme.textColor,
                                                 fontSize: 20,
                                               )),
                                           const SizedBox.shrink(),
                                           Text(
                                             '${_formatPercentage(_priceChange24h)} (24H)',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              color: AppTheme.textColor,
                                               fontSize: 15,
                                             ),
                                           ),
@@ -1923,8 +1971,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                                         : FontWeight.w500,
                                                 color: _selectedResolution ==
                                                         _resolutionMap['m']
-                                                    ? const Color.fromARGB(
-                                                        255, 255, 255, 255)
+                                                    ? AppTheme.textColor
                                                     : const Color(0xFF818181),
                                                 fontSize: 15,
                                               ),
@@ -1949,8 +1996,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                                         : FontWeight.w500,
                                                 color: _selectedResolution ==
                                                         _resolutionMap['q']
-                                                    ? const Color.fromARGB(
-                                                        255, 255, 255, 255)
+                                                    ? AppTheme.textColor
                                                     : const Color(0xFF818181),
                                                 fontSize: 15,
                                               ),
@@ -1975,8 +2021,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                                         : FontWeight.w500,
                                                 color: _selectedResolution ==
                                                         _resolutionMap['h']
-                                                    ? const Color.fromARGB(
-                                                        255, 255, 255, 255)
+                                                    ? AppTheme.textColor
                                                     : const Color(0xFF818181),
                                                 fontSize: 15,
                                               ),
@@ -2001,8 +2046,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                                         : FontWeight.w500,
                                                 color: _selectedResolution ==
                                                         _resolutionMap['d']
-                                                    ? const Color.fromARGB(
-                                                        255, 255, 255, 255)
+                                                    ? AppTheme.textColor
                                                     : const Color(0xFF818181),
                                                 fontSize: 15,
                                               ),
@@ -2021,12 +2065,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             'MCAP',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2046,12 +2089,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             'FDMC',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2071,12 +2113,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             'VOL',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2096,12 +2137,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             '5M',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2120,12 +2160,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             '1H',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2144,12 +2183,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          const Text(
+                                          Text(
                                             '6H',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w300,
-                                              color: Color.fromARGB(
-                                                  255, 255, 255, 255),
+                                              fontWeight: FontWeight.w400,
+                                              color: AppTheme.textColor,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -2376,10 +2414,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Text('Buy',
+                                Text('Buy',
                                     style: TextStyle(
-                                      fontWeight: FontWeight.w300,
-                                      color: Color.fromARGB(255, 255, 255, 255),
+                                      fontWeight: FontWeight.w400,
+                                      color: AppTheme.textColor,
                                       fontSize: 20,
                                     )),
                                 SizedBox(
@@ -2428,10 +2466,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         .toStringAsFixed(6)
                                         .replaceAll(RegExp(r'0+$'), '')
                                         .replaceAll(RegExp(r'\.$'), ''),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 20,
-                                      color: Color(0xFFFFFFFF),
+                                      color: AppTheme.textColor,
                                     )),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -2443,20 +2481,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         fit: BoxFit.contain),
                                     const SizedBox(width: 8),
                                     Text(_buyCurrency.toLowerCase(),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w300,
-                                          color: Color(0xFFFFFFFF),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: AppTheme.textColor,
                                           fontSize: 20,
                                         )),
                                     const SizedBox(width: 8),
                                     SvgPicture.asset(
-                                      'assets/icons/select.svg',
+                                      AppTheme.isLightTheme
+                                          ? 'assets/icons/select_light.svg'
+                                          : 'assets/icons/select_dark.svg',
                                       width: 5,
                                       height: 10,
-                                      colorFilter: const ColorFilter.mode(
-                                        Color(0xFF818181),
-                                        BlendMode.srcIn,
-                                      ),
                                     ),
                                   ],
                                 )
@@ -2487,7 +2523,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           padding: const EdgeInsets.symmetric(
                               vertical: 0, horizontal: 15),
                           child: SvgPicture.asset(
-                            'assets/icons/rotate.svg',
+                            AppTheme.isLightTheme
+                                ? 'assets/icons/rotate_light.svg'
+                                : 'assets/icons/rotate_dark.svg',
                             width: 30,
                             height: 30,
                           ),
@@ -2501,10 +2539,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Text('Sell',
+                                Text('Sell',
                                     style: TextStyle(
-                                      fontWeight: FontWeight.w300,
-                                      color: Color.fromARGB(255, 255, 255, 255),
+                                      fontWeight: FontWeight.w400,
+                                      color: AppTheme.textColor,
                                       fontSize: 20,
                                     )),
                                 SizedBox(
@@ -2561,10 +2599,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                                     .replaceAll(
                                                         RegExp(r'\.$'), '')
                                                 : '1')),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 20,
-                                      color: Color(0xFFFFFFFF),
+                                      color: AppTheme.textColor,
                                     )),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -2576,20 +2614,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         fit: BoxFit.contain),
                                     const SizedBox(width: 8),
                                     Text(_sellCurrency.toLowerCase(),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w300,
-                                          color: Color(0xFFFFFFFF),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: AppTheme.textColor,
                                           fontSize: 20,
                                         )),
                                     const SizedBox(width: 8),
                                     SvgPicture.asset(
-                                      'assets/icons/select.svg',
+                                      AppTheme.isLightTheme
+                                          ? 'assets/icons/select_light.svg'
+                                          : 'assets/icons/select_dark.svg',
                                       width: 5,
                                       height: 10,
-                                      colorFilter: const ColorFilter.mode(
-                                        Color(0xFF818181),
-                                        BlendMode.srcIn,
-                                      ),
                                     ),
                                   ],
                                 )
@@ -2621,10 +2657,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           padding: const EdgeInsets.symmetric(
                               vertical: 10, horizontal: 15),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.buttonBackgroundColor,
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -2633,7 +2669,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   'Add wallet',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    color: Color.fromARGB(255, 0, 0, 0),
+                                    color: AppTheme.buttonTextColor,
                                     fontSize: 15,
                                     height: 20 / 15,
                                   ),
@@ -2664,7 +2700,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     focusNode: _focusNode,
                                     enabled: true,
                                     readOnly: false,
-                                    cursorColor: const Color(0xFFFFFFFF),
+                                    cursorColor: AppTheme.textColor,
                                     cursorHeight: 15,
                                     maxLines: 11,
                                     minLines: 1,
@@ -2690,9 +2726,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                               _controller.text.isNotEmpty)
                                           ? null
                                           : 'Ask anything',
-                                      hintStyle: const TextStyle(
-                                          color: Color.fromARGB(
-                                              255, 255, 255, 255),
+                                      hintStyle: TextStyle(
+                                          color: AppTheme.textColor,
                                           fontFamily: 'Aeroport',
                                           fontSize: 15,
                                           fontWeight: FontWeight.w500,
@@ -2719,7 +2754,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     focusNode: _focusNode,
                                     enabled: true,
                                     readOnly: false,
-                                    cursorColor: const Color(0xFFFFFFFF),
+                                    cursorColor: AppTheme.textColor,
                                     cursorHeight: 15,
                                     maxLines: 11,
                                     minLines: 1,
@@ -2727,12 +2762,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                         _controller.text.split('\n').length == 1
                                             ? TextAlignVertical.center
                                             : TextAlignVertical.bottom,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontFamily: 'Aeroport',
                                         fontSize: 15,
                                         fontWeight: FontWeight.w500,
                                         height: 2,
-                                        color: Color(0xFFFFFFFF)),
+                                        color: AppTheme.textColor),
                                     onSubmitted: (value) {
                                       print(
                                           'TextField onSubmitted called with: "$value"'); // Debug
@@ -2777,7 +2812,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             _navigateToNewPage();
                           },
                           child: SvgPicture.asset(
-                            'assets/icons/apply.svg',
+                            AppTheme.isLightTheme
+                                ? 'assets/icons/apply_light.svg'
+                                : 'assets/icons/apply_black.svg',
                             width: 15,
                             height: 10,
                           ),
@@ -3333,7 +3370,7 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
         ),
       ),
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppTheme.backgroundColor,
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
@@ -3352,11 +3389,13 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(30),
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
                       ),
                       child: SvgPicture.asset(
-                        'assets/images/logo.svg',
+                        AppTheme.isLightTheme
+                            ? 'assets/images/logo_light.svg'
+                            : 'assets/images/logo_dark.svg',
                         width: 30,
                         height: 30,
                       ),
@@ -3541,18 +3580,18 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
                                       key: _inputTextFieldKey,
                                       controller: _inputController,
                                       focusNode: _inputFocusNode,
-                                      cursorColor: const Color(0xFFFFFFFF),
+                                      cursorColor: AppTheme.textColor,
                                       cursorHeight: 15,
                                       maxLines: 11,
                                       minLines: 1,
                                       textAlignVertical:
                                           TextAlignVertical.center,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontFamily: 'Aeroport',
                                           fontSize: 15,
                                           fontWeight: FontWeight.w500,
                                           height: 2.0,
-                                          color: Color(0xFFFFFFFF)),
+                                          color: AppTheme.textColor),
                                       onSubmitted: (value) {
                                         _askNewQuestion();
                                       },
@@ -3588,7 +3627,7 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
                                       key: _inputTextFieldKey,
                                       controller: _inputController,
                                       focusNode: _inputFocusNode,
-                                      cursorColor: const Color(0xFFFFFFFF),
+                                      cursorColor: AppTheme.textColor,
                                       cursorHeight: 15,
                                       maxLines: 11,
                                       minLines: 1,
@@ -3598,12 +3637,12 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
                                               1
                                           ? TextAlignVertical.center
                                           : TextAlignVertical.bottom,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontFamily: 'Aeroport',
                                           fontSize: 15,
                                           fontWeight: FontWeight.w500,
                                           height: 2,
-                                          color: Color(0xFFFFFFFF)),
+                                          color: AppTheme.textColor),
                                       onSubmitted: (value) {
                                         _askNewQuestion();
                                       },
@@ -3641,13 +3680,11 @@ class _NewPageState extends State<NewPage> with TickerProviderStateMixin {
                             _askNewQuestion();
                           },
                           child: SvgPicture.asset(
-                            'assets/icons/apply.svg',
+                            AppTheme.isLightTheme
+                                ? 'assets/icons/apply_light.svg'
+                                : 'assets/icons/apply_dark.svg',
                             width: 15,
                             height: 10,
-                            colorFilter: const ColorFilter.mode(
-                              Color.fromARGB(255, 255, 255, 255),
-                              BlendMode.srcIn,
-                            ),
                           ),
                         ),
                       ],

@@ -1,5 +1,5 @@
 flashing on apply
-chart pointing
+new main page
 swap.coffee retries
 round to 4 digits
 charts errors

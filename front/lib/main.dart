@@ -4212,38 +4212,90 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     width: double.infinity,
                                     child: Column(
                                       children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text('Toncoin ${_getResolutionLabel()}',
+                                      LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          // Measure text width
+                                          final textPainter = TextPainter(
+                                            text: TextSpan(
+                                              text: 'Toncoin ${_getResolutionLabel()}',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w400,
                                                 color: AppTheme.textColor,
                                                 fontSize: 20,
-                                              )),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                _buildResolutionButton('d'),
-                                                _buildResolutionButton('h'),
-                                                _buildResolutionButton('q'),
-                                                _buildResolutionButton('m'),
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                          Text(
-                                            _priceUsd != null
-                                                ? '\$${_formatPrice(_priceUsd!)}'
-                                                : '\$...',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w400,
-                                              color: AppTheme.textColor,
-                                              fontSize: 20,
-                                            ),
-                                          ),
-                                        ],
+                                            textDirection: TextDirection.ltr,
+                                          );
+                                          textPainter.layout();
+                                          final textWidth = textPainter.size.width;
+                                          
+                                          // Approximate selector width: 4 buttons * 40px + 10px padding = 170px
+                                          const selectorWidth = 170.0;
+                                          const leftPadding = 5.0;
+                                          
+                                          // Check if centered selector would overlap text
+                                          final centerX = constraints.maxWidth / 2;
+                                          final selectorLeftEdge = centerX - selectorWidth / 2;
+                                          final textRightEdge = textWidth;
+                                          
+                                          final shouldCenter = selectorLeftEdge >= textRightEdge + leftPadding;
+                                          
+                                          return Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text('Toncoin ${_getResolutionLabel()}',
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.w400,
+                                                        color: AppTheme.textColor,
+                                                        fontSize: 20,
+                                                      )),
+                                                  const SizedBox.shrink(),
+                                                  Text(
+                                                    _priceUsd != null
+                                                        ? '\$${_formatPrice(_priceUsd!)}'
+                                                        : '\$...',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w400,
+                                                      color: AppTheme.textColor,
+                                                      fontSize: 20,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              shouldCenter
+                                                  ? Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          _buildResolutionButton('d'),
+                                                          _buildResolutionButton('h'),
+                                                          _buildResolutionButton('q'),
+                                                          _buildResolutionButton('m'),
+                                                        ],
+                                                      ),
+                                                    )
+                                                  : Positioned(
+                                                      left: textRightEdge + leftPadding,
+                                                      child: Padding(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            _buildResolutionButton('d'),
+                                                            _buildResolutionButton('h'),
+                                                            _buildResolutionButton('q'),
+                                                            _buildResolutionButton('m'),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                            ],
+                                          );
+                                        },
                                       ),
                                       const SizedBox(height: 15),
                                       Row(

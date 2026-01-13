@@ -1,10 +1,10 @@
-AI Alpha
-Languages
+AI interface
 Hovers
+Languages
+Favicon change
 Wallet creation and nickname generation
 Jetton lockup
 Theme in Chrome
-Favicon change
 Bd
 Wallet creation
 Apps design

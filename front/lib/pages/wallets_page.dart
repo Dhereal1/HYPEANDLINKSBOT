@@ -96,10 +96,7 @@ class _WalletsPageState extends State<WalletsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        top: false,
-        child: Builder(
+      body: Builder(
           builder: (context) {
             // Calculate padding statically to avoid rebuilds when keyboard opens
             // The logo visibility doesn't actually change when keyboard opens,
@@ -285,7 +282,6 @@ class _WalletsPageState extends State<WalletsPage> {
             );
           },
         ),
-      ),
     );
   }
 }

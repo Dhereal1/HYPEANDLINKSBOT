@@ -47,7 +47,6 @@ class _MainPageState extends State<MainPage> {
 
   // Feed items data with SVG images
   List<Map<String, dynamic>> get _feedItems {
-    
     return [
       {
         'icon': 'assets/sample/mak/3.svg',
@@ -119,14 +118,14 @@ class _MainPageState extends State<MainPage> {
 
   // Scroll controller for main content
   final ScrollController _mainScrollController = ScrollController();
-  
+
   @override
   void initState() {
     super.initState();
 
     // Listen to scroll changes to update scroll indicator
     _mainScrollController.addListener(_updateScrollIndicator);
-    
+
     // Calculate initial scroll indicator state after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateScrollIndicator();
@@ -153,114 +152,111 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: SafeArea(
-          bottom: false,
-          top: false, // Disable SafeArea top padding - we handle it manually
-          child: Builder(
-            builder: (context) {
-              // Calculate padding statically to avoid rebuilds when keyboard opens
-              // The logo visibility doesn't actually change when keyboard opens,
-              // so we don't need to listen to fullscreenNotifier here
-              final topPadding = GlobalLogoBar.getContentTopPadding();
-              final logoBlockHeight = GlobalLogoBar.getLogoBlockHeight();
-              final bottomBarHeight = _getGlobalBottomBarHeight();
-              print('[MainPage] Applying content top padding: $topPadding');
-              return Stack(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(
-                        bottom: _getAdaptiveBottomPadding(),
-                        top: topPadding, // Dynamic padding based on logo visibility
-                        left: 15,
-                        right: 15),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 570),
-                        child: SingleChildScrollView(
-                          controller: _mainScrollController,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      // Hash row with icons - content part
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 15),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Builder(
+        builder: (context) {
+          // Calculate padding statically to avoid rebuilds when keyboard opens
+          // The logo visibility doesn't actually change when keyboard opens,
+          // so we don't need to listen to fullscreenNotifier here
+          final topPadding = GlobalLogoBar.getContentTopPadding();
+          final logoBlockHeight = GlobalLogoBar.getLogoBlockHeight();
+          final bottomBarHeight = _getGlobalBottomBarHeight();
+          print('[MainPage] Applying content top padding: $topPadding');
+          return Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(
+                    bottom: _getAdaptiveBottomPadding(),
+                    top: topPadding, // Dynamic padding based on logo visibility
+                    left: 15,
+                    right: 15),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 570),
+                    child: SingleChildScrollView(
+                      controller: _mainScrollController,
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          const Text(
-                            '..xk5str4e',
-                            style: TextStyle(
-                              fontFamily: 'Aeroport Mono',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w400,
-                              color: Color(0xFF818181),
+                          // Hash row with icons - content part
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 15),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  '..xk5str4e',
+                                  style: TextStyle(
+                                    fontFamily: 'Aeroport Mono',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
+                                    color: Color(0xFF818181),
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Copy action
+                                      },
+                                      child: SvgPicture.asset(
+                                        'assets/icons/copy.svg',
+                                        width: 30,
+                                        height: 30,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Edit action
+                                      },
+                                      child: SvgPicture.asset(
+                                        'assets/icons/edit.svg',
+                                        width: 30,
+                                        height: 30,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Edit action
+                                      },
+                                      child: SvgPicture.asset(
+                                        'assets/icons/key.svg',
+                                        width: 30,
+                                        height: 30,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Language action
+                                      },
+                                      child: SvgPicture.asset(
+                                        'assets/icons/ru.svg',
+                                        width: 30,
+                                        height: 30,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 15),
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Exit action
+                                      },
+                                      child: SvgPicture.asset(
+                                        'assets/icons/exit.svg',
+                                        width: 30,
+                                        height: 30,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  // Copy action
-                                },
-                                child: SvgPicture.asset(
-                                  'assets/icons/copy.svg',
-                                  width: 30,
-                                  height: 30,
-                                ),
-                              ),
-                              const SizedBox(width: 15),
-                              GestureDetector(
-                                onTap: () {
-                                  // Edit action
-                                },
-                                child: SvgPicture.asset(
-                                  'assets/icons/edit.svg',
-                                  width: 30,
-                                  height: 30,
-                                ),
-                              ),
-                              const SizedBox(width: 15),
-                              GestureDetector(
-                                onTap: () {
-                                  // Edit action
-                                },
-                                child: SvgPicture.asset(
-                                  'assets/icons/key.svg',
-                                  width: 30,
-                                  height: 30,
-                                ),
-                              ),
-                              const SizedBox(width: 15),
-                              GestureDetector(
-                                onTap: () {
-                                  // Language action
-                                },
-                                child: SvgPicture.asset(
-                                  'assets/icons/ru.svg',
-                                  width: 30,
-                                  height: 30,
-                                ),
-                              ),
-                              const SizedBox(width: 15),
-                              GestureDetector(
-                                onTap: () {
-                                  // Exit action
-                                },
-                                child: SvgPicture.asset(
-                                  'assets/icons/exit.svg',
-                                  width: 30,
-                                  height: 30,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -285,7 +281,9 @@ class _MainPageState extends State<MainPage> {
                                   Navigator.push(
                                     context,
                                     PageRouteBuilder(
-                                      pageBuilder: (context, animation, secondaryAnimation) => const WalletsPage(),
+                                      pageBuilder: (context, animation,
+                                              secondaryAnimation) =>
+                                          const WalletsPage(),
                                       transitionDuration: Duration.zero,
                                       reverseTransitionDuration: Duration.zero,
                                     ),
@@ -304,14 +302,14 @@ class _MainPageState extends State<MainPage> {
                                         color: Color(0xFF818181),
                                         height: 1.0,
                                       ),
-                                      textHeightBehavior:
-                                          TextHeightBehavior(
+                                      textHeightBehavior: TextHeightBehavior(
                                         applyHeightToFirstAscent: false,
                                         applyHeightToLastDescent: false,
                                       ),
                                     ),
                                     const SizedBox(width: 5),
-                                    SvgPicture.asset('assets/icons/select.svg', width: 5, height: 10),
+                                    SvgPicture.asset('assets/icons/select.svg',
+                                        width: 5, height: 10),
                                   ],
                                 ),
                               ),
@@ -363,9 +361,12 @@ class _MainPageState extends State<MainPage> {
                                     Navigator.push(
                                       context,
                                       PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) => const SwapPage(),
+                                        pageBuilder: (context, animation,
+                                                secondaryAnimation) =>
+                                            const SwapPage(),
                                         transitionDuration: Duration.zero,
-                                        reverseTransitionDuration: Duration.zero,
+                                        reverseTransitionDuration:
+                                            Duration.zero,
                                       ),
                                     );
                                   },
@@ -448,9 +449,12 @@ class _MainPageState extends State<MainPage> {
                                     Navigator.push(
                                       context,
                                       PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) => const TradePage(),
+                                        pageBuilder: (context, animation,
+                                                secondaryAnimation) =>
+                                            const TradePage(),
                                         transitionDuration: Duration.zero,
-                                        reverseTransitionDuration: Duration.zero,
+                                        reverseTransitionDuration:
+                                            Duration.zero,
                                       ),
                                     );
                                   },
@@ -497,16 +501,19 @@ class _MainPageState extends State<MainPage> {
                                     Navigator.push(
                                       context,
                                       PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) =>
+                                        pageBuilder: (context, animation,
+                                                secondaryAnimation) =>
                                             const SendPage(),
                                         transitionDuration: Duration.zero,
-                                        reverseTransitionDuration: Duration.zero,
+                                        reverseTransitionDuration:
+                                            Duration.zero,
                                       ),
                                     );
                                   },
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       SvgPicture.asset(
                                         AppTheme.isLightTheme
@@ -676,7 +683,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['primaryText'] as String,
+                                                    item['primaryText']
+                                                        as String,
                                                     style: TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -701,7 +709,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['secondaryText'] as String,
+                                                    item['secondaryText']
+                                                        as String,
                                                     style: const TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -738,7 +747,8 @@ class _MainPageState extends State<MainPage> {
                                                   style: TextStyle(
                                                     fontFamily: 'Aeroport',
                                                     fontSize: 15,
-                                                    fontWeight: FontWeight.w500, // medium
+                                                    fontWeight: FontWeight
+                                                        .w500, // medium
                                                     color: AppTheme.textColor,
                                                     height: 1.0,
                                                   ),
@@ -760,15 +770,20 @@ class _MainPageState extends State<MainPage> {
                                                       alignment:
                                                           Alignment.centerRight,
                                                       child: Text(
-                                                        item['rightText'] as String,
+                                                        item['rightText']
+                                                            as String,
                                                         style: const TextStyle(
-                                                          fontFamily: 'Aeroport',
+                                                          fontFamily:
+                                                              'Aeroport',
                                                           fontSize: 15,
-                                                          fontWeight: FontWeight.w400,
-                                                          color: Color(0xFF818181),
+                                                          fontWeight:
+                                                              FontWeight.w400,
+                                                          color:
+                                                              Color(0xFF818181),
                                                           height: 1.0,
                                                         ),
-                                                        textAlign: TextAlign.right,
+                                                        textAlign:
+                                                            TextAlign.right,
                                                         textHeightBehavior:
                                                             const TextHeightBehavior(
                                                           applyHeightToFirstAscent:
@@ -821,7 +836,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['primaryText'] as String,
+                                                    item['primaryText']
+                                                        as String,
                                                     style: TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -846,7 +862,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['secondaryText'] as String,
+                                                    item['secondaryText']
+                                                        as String,
                                                     style: const TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -883,7 +900,8 @@ class _MainPageState extends State<MainPage> {
                                                   style: TextStyle(
                                                     fontFamily: 'Aeroport',
                                                     fontSize: 15,
-                                                    fontWeight: FontWeight.w500, // medium
+                                                    fontWeight: FontWeight
+                                                        .w500, // medium
                                                     color: AppTheme.textColor,
                                                     height: 1.0,
                                                   ),
@@ -905,15 +923,20 @@ class _MainPageState extends State<MainPage> {
                                                       alignment:
                                                           Alignment.centerRight,
                                                       child: Text(
-                                                        item['rightText'] as String,
+                                                        item['rightText']
+                                                            as String,
                                                         style: const TextStyle(
-                                                          fontFamily: 'Aeroport',
+                                                          fontFamily:
+                                                              'Aeroport',
                                                           fontSize: 15,
-                                                          fontWeight: FontWeight.w400,
-                                                          color: Color(0xFF818181),
+                                                          fontWeight:
+                                                              FontWeight.w400,
+                                                          color:
+                                                              Color(0xFF818181),
                                                           height: 1.0,
                                                         ),
-                                                        textAlign: TextAlign.right,
+                                                        textAlign:
+                                                            TextAlign.right,
                                                         textHeightBehavior:
                                                             const TextHeightBehavior(
                                                           applyHeightToFirstAscent:
@@ -966,7 +989,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['primaryText'] as String,
+                                                    item['primaryText']
+                                                        as String,
                                                     style: TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -991,7 +1015,8 @@ class _MainPageState extends State<MainPage> {
                                                   alignment:
                                                       Alignment.centerLeft,
                                                   child: Text(
-                                                    item['secondaryText'] as String,
+                                                    item['secondaryText']
+                                                        as String,
                                                     style: const TextStyle(
                                                       fontFamily: 'Aeroport',
                                                       fontSize: 15,
@@ -1028,7 +1053,8 @@ class _MainPageState extends State<MainPage> {
                                                   style: TextStyle(
                                                     fontFamily: 'Aeroport',
                                                     fontSize: 15,
-                                                    fontWeight: FontWeight.w500, // medium
+                                                    fontWeight: FontWeight
+                                                        .w500, // medium
                                                     color: AppTheme.textColor,
                                                     height: 1.0,
                                                   ),
@@ -1050,15 +1076,20 @@ class _MainPageState extends State<MainPage> {
                                                       alignment:
                                                           Alignment.centerRight,
                                                       child: Text(
-                                                        item['rightText'] as String,
+                                                        item['rightText']
+                                                            as String,
                                                         style: const TextStyle(
-                                                          fontFamily: 'Aeroport',
+                                                          fontFamily:
+                                                              'Aeroport',
                                                           fontSize: 15,
-                                                          fontWeight: FontWeight.w400,
-                                                          color: Color(0xFF818181),
+                                                          fontWeight:
+                                                              FontWeight.w400,
+                                                          color:
+                                                              Color(0xFF818181),
                                                           height: 1.0,
                                                         ),
-                                                        textAlign: TextAlign.right,
+                                                        textAlign:
+                                                            TextAlign.right,
                                                         textHeightBehavior:
                                                             const TextHeightBehavior(
                                                           applyHeightToFirstAscent:
@@ -1087,19 +1118,22 @@ class _MainPageState extends State<MainPage> {
                                   // Calculate item width: (availableWidth - crossAxisSpacing) / crossAxisCount
                                   // Available width accounts for container padding (15px on each side)
                                   final availableWidth = constraints.maxWidth;
-                                  final itemWidth = (availableWidth - 15.0) / 2.0;
+                                  final itemWidth =
+                                      (availableWidth - 15.0) / 2.0;
                                   // Item height = image height (same as width since aspect ratio 1:1) + spacing + text heights
                                   // Image: itemWidth (1:1 aspect ratio)
                                   // Spacing: 15px (after image) + 5px (between texts) = 20px
                                   // Text heights: 20px (title) + 20px (subtitle) = 40px
                                   // Total: itemWidth + 15 + 20 + 5 + 20 = itemWidth + 60
                                   final itemHeight = itemWidth + 60.0;
-                                  
+
                                   return GridView.builder(
                                     shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
                                     padding: EdgeInsets.zero,
-                                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: 2,
                                       crossAxisSpacing: 15.0,
                                       mainAxisSpacing: 20.0,
@@ -1109,7 +1143,8 @@ class _MainPageState extends State<MainPage> {
                                     itemBuilder: (context, index) {
                                       final item = _items[index];
                                       return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           // Image - rectangle filling the width
@@ -1130,9 +1165,11 @@ class _MainPageState extends State<MainPage> {
                                               fontSize: 15,
                                               fontWeight: FontWeight.w400,
                                               color: AppTheme.textColor,
-                                              height: 20 / 15, // 20px line height / 15px font size
+                                              height: 20 /
+                                                  15, // 20px line height / 15px font size
                                             ),
-                                            textHeightBehavior: const TextHeightBehavior(
+                                            textHeightBehavior:
+                                                const TextHeightBehavior(
                                               applyHeightToFirstAscent: false,
                                               applyHeightToLastDescent: false,
                                             ),
@@ -1151,7 +1188,8 @@ class _MainPageState extends State<MainPage> {
                                                 color: Color(0xFF818181),
                                                 height: 20 / 15,
                                               ),
-                                              textHeightBehavior: const TextHeightBehavior(
+                                              textHeightBehavior:
+                                                  const TextHeightBehavior(
                                                 applyHeightToFirstAscent: false,
                                                 applyHeightToLastDescent: false,
                                               ),
@@ -1180,7 +1218,8 @@ class _MainPageState extends State<MainPage> {
                                           CrossAxisAlignment.center,
                                       children: [
                                         // Coin icon - 30px, centered vertically relative to 40px text columns
-                                        (coin['icon'] as String).endsWith('.svg')
+                                        (coin['icon'] as String)
+                                                .endsWith('.svg')
                                             ? SvgPicture.asset(
                                                 coin['icon'] as String,
                                                 width: 30,
@@ -1317,77 +1356,79 @@ class _MainPageState extends State<MainPage> {
                                 );
                               }).toList(),
                             ),
-                    ],
-                  ),
-                ),
+                        ],
                       ),
                     ),
                   ),
-                  // Scroll indicator - always visible, 5px from right edge
-                  // Height reflects visible area dimension
-                  Positioned(
-                    right: 5,
-                    top: logoBlockHeight,
-                    bottom: bottomBarHeight,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final containerHeight = constraints.maxHeight;
-                        if (containerHeight <= 0 || !_mainScrollController.hasClients) {
-                          return const SizedBox.shrink();
-                        }
-                        
-                        try {
-                          final position = _mainScrollController.position;
-                          final maxScroll = position.maxScrollExtent;
-                          final currentScroll = position.pixels;
-                          final viewportHeight = position.viewportDimension;
-                          final totalHeight = viewportHeight + maxScroll;
-                          
-                          // If no scrolling needed, hide the indicator
-                          if (maxScroll <= 0 || totalHeight <= 0) {
-                            return const SizedBox.shrink();
-                          }
-                          
-                          // Calculate indicator height based on visible area
-                          final indicatorHeightRatio = (viewportHeight / totalHeight).clamp(0.0, 1.0);
-                          final indicatorHeight = (containerHeight * indicatorHeightRatio)
+                ),
+              ),
+              // Scroll indicator - always visible, 5px from right edge
+              // Height reflects visible area dimension
+              Positioned(
+                right: 5,
+                top: logoBlockHeight,
+                bottom: bottomBarHeight,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final containerHeight = constraints.maxHeight;
+                    if (containerHeight <= 0 ||
+                        !_mainScrollController.hasClients) {
+                      return const SizedBox.shrink();
+                    }
+
+                    try {
+                      final position = _mainScrollController.position;
+                      final maxScroll = position.maxScrollExtent;
+                      final currentScroll = position.pixels;
+                      final viewportHeight = position.viewportDimension;
+                      final totalHeight = viewportHeight + maxScroll;
+
+                      // If no scrolling needed, hide the indicator
+                      if (maxScroll <= 0 || totalHeight <= 0) {
+                        return const SizedBox.shrink();
+                      }
+
+                      // Calculate indicator height based on visible area
+                      final indicatorHeightRatio =
+                          (viewportHeight / totalHeight).clamp(0.0, 1.0);
+                      final indicatorHeight =
+                          (containerHeight * indicatorHeightRatio)
                               .clamp(0.0, containerHeight);
-                          
-                          // If indicator height is 0 or very small, hide it
-                          if (indicatorHeight <= 0) {
-                            return const SizedBox.shrink();
-                          }
-                          
-                          // Calculate scroll position
-                          final scrollPosition = (currentScroll / maxScroll).clamp(0.0, 1.0);
-                          final availableSpace = (containerHeight - indicatorHeight)
-                              .clamp(0.0, containerHeight);
-                          final topPosition = (scrollPosition * availableSpace)
-                              .clamp(0.0, containerHeight);
-                          
-                          return Align(
-                            alignment: Alignment.topCenter,
-                            child: Padding(
-                              padding: EdgeInsets.only(top: topPosition),
-                              child: Container(
-                                width: 1,
-                                height: indicatorHeight,
-                                color: const Color(0xFF818181),
-                              ),
-                            ),
-                          );
-                        } catch (e) {
-                          return const SizedBox.shrink();
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+
+                      // If indicator height is 0 or very small, hide it
+                      if (indicatorHeight <= 0) {
+                        return const SizedBox.shrink();
+                      }
+
+                      // Calculate scroll position
+                      final scrollPosition =
+                          (currentScroll / maxScroll).clamp(0.0, 1.0);
+                      final availableSpace = (containerHeight - indicatorHeight)
+                          .clamp(0.0, containerHeight);
+                      final topPosition = (scrollPosition * availableSpace)
+                          .clamp(0.0, containerHeight);
+
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(top: topPosition),
+                          child: Container(
+                            width: 1,
+                            height: indicatorHeight,
+                            color: const Color(0xFF818181),
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      return const SizedBox.shrink();
+                    }
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
-

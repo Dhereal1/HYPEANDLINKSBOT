@@ -130,12 +130,12 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.only(top: 10, bottom: 15),
-        child: SafeArea(
-          top: false,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Padding(
+        // Don't use SafeArea - it reads MediaQuery and causes rebuilds
+        // Bottom safe area is handled via TelegramSafeAreaService in page padding calculations
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Padding(
                 padding: const EdgeInsets.only(left: 15, right: 15),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -273,7 +273,6 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
             ),
           ),
         ),
-      ),
     );
   }
 }

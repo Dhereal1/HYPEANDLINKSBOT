@@ -1485,9 +1485,7 @@ class _SwapPageState extends State<SwapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: SafeArea(
-        bottom: false,
-        child: Builder(
+      body: Builder(
           builder: (context) {
             // Calculate padding statically to avoid rebuilds when keyboard opens
             // The logo visibility doesn't actually change when keyboard opens,
@@ -2346,7 +2344,6 @@ class _SwapPageState extends State<SwapPage> {
             );
           },
         ),
-      ),
     );
   }
 }

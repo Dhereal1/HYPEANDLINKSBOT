@@ -15,14 +15,29 @@ class GlobalLogoBar extends StatefulWidget {
   static final ValueNotifier<bool> _fullscreenNotifier = ValueNotifier<bool>(true);
   static ValueNotifier<bool> get fullscreenNotifier => _fullscreenNotifier;
 
+  // Cache initial safe area values to prevent recalculation when keyboard opens
+  // These values are set once during initialization and don't change during keyboard operations
+  static double? _cachedLogoTopPadding;
+  static double? _cachedLogoBlockHeight;
+  static bool _hasCachedValues = false;
+
   // Helper method to calculate logo top padding
+  // CRITICAL: Caches the value to prevent recalculation when keyboard opens
+  // Safe area values should not change during keyboard operations
   static double _getLogoTopPadding() {
+    // Return cached value if available to prevent recalculation during keyboard operations
+    if (_hasCachedValues && _cachedLogoTopPadding != null) {
+      return _cachedLogoTopPadding!;
+    }
+    
     final service = TelegramSafeAreaService();
     
     // Check if we're in a browser (Telegram WebApp not available)
     // In browser, safe area insets are not available, so use fallback
     if (!service.isAvailable) {
       // Browser fallback: use 30px top padding
+      _cachedLogoTopPadding = 30.0;
+      _hasCachedValues = true;
       return 30.0;
     }
     
@@ -32,22 +47,40 @@ class GlobalLogoBar extends StatefulWidget {
     // If both insets are zero (browser or no safe area data), use fallback
     if (safeAreaInset.isEmpty && contentSafeAreaInset.isEmpty) {
       // Browser fallback: use 30px top padding
+      _cachedLogoTopPadding = 30.0;
+      _hasCachedValues = true;
       return 30.0;
     }
 
     // Formula: top SafeAreaInset + (top ContentSafeAreaInset / 2) - 16
     // This centers the 32px logo in the content safe area zone, respecting the upper inset
     final topPadding = safeAreaInset.top + (contentSafeAreaInset.top / 2) - 16;
+    
+    // Cache the value to prevent recalculation when keyboard opens
+    _cachedLogoTopPadding = topPadding;
+    _hasCachedValues = true;
+    
     return topPadding;
   }
 
   // Helper method to calculate logo block height
   // Logo block consists of: top padding + logo (32px) + bottom padding (10px)
+  // CRITICAL: Caches the value to prevent recalculation when keyboard opens
   static double getLogoBlockHeight() {
+    // Return cached value if available to prevent recalculation during keyboard operations
+    if (_hasCachedValues && _cachedLogoBlockHeight != null) {
+      return _cachedLogoBlockHeight!;
+    }
+    
     const logoHeight = 32.0;
     const bottomPadding = 10.0;
     
-    return _getLogoTopPadding() + logoHeight + bottomPadding;
+    final height = _getLogoTopPadding() + logoHeight + bottomPadding;
+    
+    // Cache the value to prevent recalculation when keyboard opens
+    _cachedLogoBlockHeight = height;
+    
+    return height;
   }
 
   /// Get the top padding for content based on logo visibility
@@ -117,6 +150,16 @@ class _GlobalLogoBarState extends State<GlobalLogoBar> with SingleTickerProvider
       vsync: this,
     );
     
+    // CRITICAL: Initialize cached safe area values ONCE during init
+    // This prevents recalculation when keyboard opens and viewport changes
+    // The cache is initialized on first access, but we ensure it's set here
+    if (!GlobalLogoBar._hasCachedValues) {
+      // Force calculation and caching of logo padding values
+      GlobalLogoBar._getLogoTopPadding();
+      GlobalLogoBar.getLogoBlockHeight();
+      print('[GlobalLogoBar] Cached initial safe area values for logo positioning');
+    }
+    
     // Determine initial logo visibility
     final telegramWebApp = TelegramWebApp();
     
@@ -182,10 +225,54 @@ class _GlobalLogoBarState extends State<GlobalLogoBar> with SingleTickerProvider
         // In browser mode, always show logo without animation
         if (isInBrowser) {
           final logoBlockHeight = GlobalLogoBar.getLogoBlockHeight();
-          return SafeArea(
-            top: false,
-            bottom: false,
-            child: Material(
+          // Don't use SafeArea - it reads MediaQuery and causes rebuilds
+          // Safe area calculations are handled via TelegramSafeAreaService in _getLogoTopPadding()
+          return Material(
+            color: Colors.transparent,
+            child: Container(
+              width: double.infinity,
+              height: logoBlockHeight,
+              padding: EdgeInsets.only(
+                  top: GlobalLogoBar._getLogoTopPadding(),
+                  bottom: 10,
+                  left: 15,
+                  right: 15),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: SvgPicture.asset(
+                      AppTheme.isLightTheme
+                          ? 'assets/images/logo_light.svg'
+                          : 'assets/images/logo_dark.svg',
+                      width: 32,
+                      height: 32,
+                      key: const ValueKey('global_logo'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        
+        // In TMA mode, check isFullscreen and show/hide logo directly without animation
+        // Use ValueListenableBuilder to react to fullscreen changes
+        return ValueListenableBuilder<bool>(
+          valueListenable: GlobalLogoBar.fullscreenNotifier,
+          builder: (context, shouldShowLogo, _) {
+            // Hide logo if not fullscreen
+            if (!shouldShowLogo) {
+              return const SizedBox.shrink();
+            }
+            
+            // Show logo directly in TMA fullscreen mode
+            final logoBlockHeight = GlobalLogoBar.getLogoBlockHeight();
+            // Don't use SafeArea - it reads MediaQuery and causes rebuilds
+            // Safe area calculations are handled via TelegramSafeAreaService in _getLogoTopPadding()
+            return Material(
               color: Colors.transparent,
               child: Container(
                 width: double.infinity,
@@ -208,54 +295,6 @@ class _GlobalLogoBarState extends State<GlobalLogoBar> with SingleTickerProvider
                         width: 32,
                         height: 32,
                         key: const ValueKey('global_logo'),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-        
-        // In TMA mode, check isFullscreen and show/hide logo directly without animation
-        // Use ValueListenableBuilder to react to fullscreen changes
-        return ValueListenableBuilder<bool>(
-          valueListenable: GlobalLogoBar.fullscreenNotifier,
-          builder: (context, shouldShowLogo, _) {
-            // Hide logo if not fullscreen
-            if (!shouldShowLogo) {
-              return const SizedBox.shrink();
-            }
-            
-            // Show logo directly in TMA fullscreen mode
-            final logoBlockHeight = GlobalLogoBar.getLogoBlockHeight();
-            return SafeArea(
-              top: false,
-              bottom: false,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  width: double.infinity,
-                  height: logoBlockHeight,
-                  padding: EdgeInsets.only(
-                      top: GlobalLogoBar._getLogoTopPadding(),
-                      bottom: 10,
-                      left: 15,
-                      right: 15),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: SvgPicture.asset(
-                          AppTheme.isLightTheme
-                              ? 'assets/images/logo_light.svg'
-                              : 'assets/images/logo_dark.svg',
-                          width: 32,
-                          height: 32,
-                          key: const ValueKey('global_logo'),
-                        ),
                       ),
                     ),
                   ),

@@ -7,6 +7,7 @@ import '../telegram_safe_area.dart';
 import '../app/theme/app_theme.dart';
 import '../telegram_webapp.dart';
 import '../widgets/global/global_bottom_bar.dart';
+import '../utils/keyboard_height_service.dart';
 
 class SendPage extends StatefulWidget {
   const SendPage({super.key});
@@ -124,18 +125,15 @@ class _SendPageState extends State<SendPage> {
 
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    // Don't read MediaQuery here - it causes entire page to rebuild when keyboard opens
+    // Use static values and wrap only the button positioning in ValueListenableBuilder
     final bottomBarHeight = GlobalBottomBar.getBottomBarHeight(context);
     
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: Stack(
         children: [
-          SafeArea(
-              bottom: false,
-              top: false,
-              child: Builder(
+          Builder(
                 builder: (context) {
                   // Calculate padding statically to avoid rebuilds when keyboard opens
                   // The logo visibility doesn't actually change when keyboard opens,
@@ -448,49 +446,54 @@ class _SendPageState extends State<SendPage> {
                 );
                 },
               ),
-          ),
           // Send button positioned at the bottom, above GlobalBottomBar
-            Positioned(
-              bottom: keyboardHeight + bottomBarHeight,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 15),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF818181),
-                        borderRadius: BorderRadius.zero, // No rounded corners
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Center(
-                            child: Text(
-                              'Send',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white, // White text for contrast on #818181
-                                fontSize: 15,
-                                height: 20 / 15,
+          // Wrap in ValueListenableBuilder so only this widget rebuilds when keyboard opens
+          ValueListenableBuilder<double>(
+            valueListenable: KeyboardHeightService().heightNotifier,
+            builder: (context, keyboardHeight, child) {
+              return Positioned(
+                bottom: keyboardHeight + bottomBarHeight,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 10, horizontal: 15),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF818181),
+                          borderRadius: BorderRadius.zero, // No rounded corners
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Center(
+                              child: Text(
+                                'Send',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white, // White text for contrast on #818181
+                                  fontSize: 15,
+                                  height: 20 / 15,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

@@ -70,10 +70,15 @@ class _MyAppState extends State<MyApp> {
               resizeToAvoidBottomInset: false, // CRITICAL: Prevents page reload on keyboard
               backgroundColor: AppTheme.backgroundColor,
               body: Stack(
+                clipBehavior: Clip.none, // Allow overlays to extend beyond Stack bounds
                 children: [
                   // Main content (pages) - base layer, NEVER rebuilds when keyboard opens
                   // Pages use GlobalLogoBar.getContentTopPadding() for top spacing
-                  child ?? const SizedBox.shrink(),
+                  // Wrap in RepaintBoundary to isolate repaints and prevent visual artifacts
+                  // when Stack layout recalculates due to Positioned widget changes
+                  RepaintBoundary(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                   
                   // Top bar overlay - independent positioning
                   // Hides/shows in Telegram based on fullscreen mode
@@ -92,32 +97,49 @@ class _MyAppState extends State<MyApp> {
                   
                   // AI search overlay - positioned below logo bar
                   // Uses keyboard height to center options in visible area
-                  ValueListenableBuilder<double>(
-                    valueListenable: KeyboardHeightService().heightNotifier,
-                    builder: (context, keyboardHeight, child) {
-                      return Positioned(
-                        top: GlobalLogoBar.getLogoBlockHeight(),
-                        left: 0,
-                        right: 0,
-                        bottom: keyboardHeight, // Exclude keyboard area for proper centering
-                        child: child ?? const AiSearchOverlay(),
-                      );
-                    },
-                    child: const AiSearchOverlay(),
+                  // Use fixed Positioned with LayoutBuilder to prevent Stack layout recalculation
+                  Positioned(
+                    top: GlobalLogoBar.getLogoBlockHeight(),
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return ValueListenableBuilder<double>(
+                          valueListenable: KeyboardHeightService().heightNotifier,
+                          builder: (context, keyboardHeight, child) {
+                            // Use SizedBox to adjust height instead of changing Positioned.bottom
+                            // This prevents Stack from recalculating layout when keyboard height changes
+                            return SizedBox(
+                              height: constraints.maxHeight - keyboardHeight,
+                              child: child ?? const AiSearchOverlay(),
+                            );
+                          },
+                          child: const AiSearchOverlay(),
+                        );
+                      },
+                    ),
                   ),
                   
                   // Bottom bar overlay - moves with keyboard
-                  ValueListenableBuilder<double>(
-                    valueListenable: KeyboardHeightService().heightNotifier,
-                    builder: (context, keyboardHeight, child) {
-                      return Positioned(
-                        bottom: keyboardHeight,
-                        left: 0,
-                        right: 0,
-                        child: child ?? const GlobalBottomBar(),
-                      );
-                    },
-                    child: const GlobalBottomBar(),
+                  // Use fixed Positioned with Transform to prevent Stack layout recalculation
+                  // This prevents the page slide when keyboard height updates
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: KeyboardHeightService().heightNotifier,
+                      builder: (context, keyboardHeight, child) {
+                        // Use Transform.translate instead of changing Positioned.bottom
+                        // This prevents Stack from recalculating layout when keyboard height changes
+                        return Transform.translate(
+                          offset: Offset(0, -keyboardHeight),
+                          child: child ?? const GlobalBottomBar(),
+                        );
+                      },
+                      child: const GlobalBottomBar(),
+                    ),
                   ),
                 ],
               ),
@@ -261,13 +283,15 @@ class _KeyboardHeightDetectorState extends State<_KeyboardHeightDetector> {
     // But since it's isolated, the Stack doesn't rebuild
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     
-    // Update service notifier only if value changed
+    // Update service notifier only if value changed significantly (2px threshold)
     // Using post-frame callback to avoid updating during build phase
-    if ((_lastHeight - keyboardHeight).abs() > 0.1) {
+    // Use debounced update to prevent rapid rebuilds during keyboard animation
+    // Match the threshold in KeyboardHeightService.updateHeight() to avoid redundant checks
+    if ((_lastHeight - keyboardHeight).abs() >= 2.0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _lastHeight = keyboardHeight;
-          KeyboardHeightService().heightNotifier.value = keyboardHeight;
+          KeyboardHeightService().updateHeight(keyboardHeight);
           print('[KeyboardHeightDetector] Keyboard height detected: ${keyboardHeight}px');
         }
       });

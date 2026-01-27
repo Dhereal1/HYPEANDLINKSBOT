@@ -938,9 +938,26 @@ class TelegramSafeAreaService {
             onEvent.apply([
               'viewportChanged',
               js.allowInterop((dynamic data) {
-                Future.delayed(const Duration(milliseconds: 100), () {
+                // CRITICAL: Don't update safe area on viewportChanged during keyboard operations
+                // Keyboard opening causes viewport changes, but safe area values should remain stable
+                // Only update if this is a significant viewport change (orientation change, etc.)
+                // We debounce and check if the change is significant before updating
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  // Check if this is likely a keyboard-related viewport change
+                  // by comparing with current safe area - if it's the same, skip update
+                  final currentSafeArea = _currentSafeArea;
                   final newSafeArea = getSafeAreaInset();
-                  _updateSafeAreaIfValid(newSafeArea, 'viewportChanged event');
+                  
+                  // Only update if safe area actually changed significantly (orientation change)
+                  // Small changes are likely keyboard-related and should be ignored
+                  if (newSafeArea != currentSafeArea && 
+                      (newSafeArea.top != currentSafeArea.top || 
+                       newSafeArea.bottom != currentSafeArea.bottom ||
+                       newSafeArea.left != currentSafeArea.left ||
+                       newSafeArea.right != currentSafeArea.right)) {
+                    // Significant change - likely orientation change, not keyboard
+                    _updateSafeAreaIfValid(newSafeArea, 'viewportChanged event (significant)');
+                  }
                 });
               })
             ]);

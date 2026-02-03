@@ -273,6 +273,52 @@ class _TradePageState extends State<TradePage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 19),
+                    Row(
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              '24h',
+                              style: TextStyle(
+                                fontSize: 15,
+                                height: 21 / 15,
+                                color: AppTheme.textColor,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            SvgPicture.asset(
+                              'assets/icons/ap.svg',
+                              width: 11,
+                              height: 11,
+                              fit: BoxFit.contain,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 13),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Any chain',
+                              style: TextStyle(
+                                fontSize: 15,
+                                height: 21 / 15,
+                                color: AppTheme.textColor,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            SvgPicture.asset(
+                              'assets/icons/ap.svg',
+                              width: 11,
+                              height: 11,
+                              fit: BoxFit.contain,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

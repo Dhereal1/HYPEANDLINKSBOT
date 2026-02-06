@@ -251,7 +251,7 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
                             # Edit message periodically to avoid rate limits (with signature)
                             current_time = asyncio.get_event_loop().time()
                             if current_time - last_edit_time >= edit_interval:
-                                signature = "\n\n***\n\nSincerely yours, @hypeandlinksbot"
+                                signature = "\n\n***\n\nSincerely yours, @HyperlinksSpaceBot"
                                 max_response_length = 4096 - len(signature)
                                 if len(accumulated_text) > max_response_length:
                                     response_text = accumulated_text[:max_response_length - 3] + "..."
@@ -278,7 +278,7 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
                             continue
                 
                 # Final edit with complete response (add signature)
-                signature = "\n\n***\n\nSincerely yours, @hypeandlinksbot"
+                signature = "\n\n***\n\nSincerely yours, @HyperlinksSpaceBot"
                 # Calculate available space for response (Telegram limit is 4096 chars)
                 max_response_length = 4096 - len(signature)
                 if len(accumulated_text) > max_response_length:

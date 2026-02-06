@@ -7,6 +7,7 @@ from datetime import datetime
 import urllib.request
 import urllib.error
 import urllib.parse
+import time
 
 app = FastAPI()
 
@@ -16,8 +17,8 @@ ALLOWLIST_PATH = BASE_DIR.parent / "data" / "projects_allowlist.json"
 STORE_PATH = os.getenv("RAG_STORE_PATH", "rag_store.json")
 PROJECTS_STORE_PATH = os.getenv("PROJECTS_STORE_PATH", "projects_store.json")
 TOKENS_API_URL = os.getenv("TOKENS_API_URL", "https://tokens.swap.coffee")
-TOKENS_STORE_PATH = os.getenv("TOKENS_STORE_PATH", "tokens_store.json")
 TOKENS_API_KEY = os.getenv("TOKENS_API_KEY")
+TOKENS_VERIFICATION = os.getenv("TOKENS_VERIFICATION", "WHITELISTED,COMMUNITY,UNKNOWN")
 
 def load_store() -> List[Dict[str, Any]]:
     if not os.path.exists(STORE_PATH):
@@ -42,58 +43,86 @@ def load_projects() -> List[Dict[str, Any]]:
 def save_projects(projects: List[Dict[str, Any]]) -> None:
     with open(PROJECTS_STORE_PATH, "w", encoding="utf-8") as f:
         f.write(json.dumps(projects, ensure_ascii=False, indent=2))
-
-def load_tokens() -> List[Dict[str, Any]]:
-    if not os.path.exists(TOKENS_STORE_PATH):
-        return []
-    try:
-        data = json.loads(open(TOKENS_STORE_PATH, "r", encoding="utf-8").read())
-        if isinstance(data, dict):
-            return list(data.values())
-        if isinstance(data, list):
-            return data
-        return []
-    except:
-        return []
-
-def save_tokens(tokens: List[Dict[str, Any]]) -> None:
-    with open(TOKENS_STORE_PATH, "w", encoding="utf-8") as f:
-        f.write(json.dumps(tokens, ensure_ascii=False, indent=2))
-
-def _safe_int(value: Any) -> Optional[int]:
-    try:
-        return int(value)
-    except:
-        return None
-
 def _normalize_symbol(symbol: str) -> str:
     if symbol is None:
         return ""
     cleaned = symbol.replace("$", "").replace(" ", "").strip()
     return cleaned.upper()
 
-def fetch_token_by_symbol(symbol: str) -> Optional[Dict[str, Any]]:
-    qs = urllib.parse.urlencode({"search": symbol, "size": 10})
+def fetch_token_by_symbol(symbol: str) -> Dict[str, Any]:
+    qs = urllib.parse.urlencode({"search": symbol, "size": 10, "verification": TOKENS_VERIFICATION})
     url = f"{TOKENS_API_URL}/api/v3/jettons?{qs}"
+    started = time.monotonic()
     try:
         req = urllib.request.Request(url)
         if TOKENS_API_KEY:
             req.add_header("X-Api-Key", TOKENS_API_KEY)
         with urllib.request.urlopen(req, timeout=10) as resp:
-            if getattr(resp, "status", 200) != 200:
-                return None
-            payload = resp.read().decode("utf-8")
-            data = json.loads(payload)
+            status = getattr(resp, "status", 200)
+            body = resp.read().decode("utf-8", errors="ignore")
+            if status != 200:
+                return {
+                    "error": "unavailable",
+                    "reason": "non_200",
+                    "status_code": status,
+                    "response_snippet": body[:200],
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    "source": "swap.coffee",
+                }
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                return {
+                    "error": "unavailable",
+                    "reason": "json_parse",
+                    "status_code": status,
+                    "response_snippet": body[:200],
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    "source": "swap.coffee",
+                }
             if not isinstance(data, list):
-                return None
+                return {
+                    "error": "unavailable",
+                    "reason": "unexpected_payload",
+                    "status_code": status,
+                    "response_snippet": body[:200],
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
+                    "source": "swap.coffee",
+                }
             for item in data:
                 if str(item.get("symbol", "")).upper() == symbol:
-                    return item
-            return data[0] if data else None
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError):
-        return None
-    except:
-        return None
+                    return {"data": item, "elapsed_ms": int((time.monotonic() - started) * 1000)}
+            if not data:
+                return {
+                    "error": "not_found",
+                    "symbol": symbol,
+                    "source": "swap.coffee",
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
+                }
+            return {"data": data[0], "elapsed_ms": int((time.monotonic() - started) * 1000)}
+    except urllib.error.HTTPError as e:
+        return {
+            "error": "unavailable",
+            "reason": "http_error",
+            "status_code": e.code,
+            "response_snippet": (e.read().decode("utf-8", errors="ignore")[:200] if hasattr(e, "read") else ""),
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+            "source": "swap.coffee",
+        }
+    except urllib.error.URLError:
+        return {
+            "error": "unavailable",
+            "reason": "connection",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+            "source": "swap.coffee",
+        }
+    except Exception:
+        return {
+            "error": "unavailable",
+            "reason": "unknown",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+            "source": "swap.coffee",
+        }
 
 class IngestDoc(BaseModel):
     text: str
@@ -133,11 +162,11 @@ async def get_project(project_id: str):
 
 @app.get("/tokens/{symbol}")
 async def get_token(symbol: str):
-    normalized = _normalize_symbol(symbol)
     now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    normalized = _normalize_symbol(symbol)
     source_url = f"{TOKENS_API_URL}/api/v3/jettons?search={urllib.parse.quote(normalized)}"
 
-    if not normalized:
+    if not normalized or not (2 <= len(normalized) <= 10):
         return {
             "error": "unavailable",
             "updated_at": now,
@@ -150,15 +179,56 @@ async def get_token(symbol: str):
             ],
         }
 
-    cached = load_tokens()
-    by_symbol = {str(t.get("symbol", "")).upper(): t for t in cached if isinstance(t, dict)}
-    if normalized in by_symbol:
-        return by_symbol[normalized]
+    if normalized == "TON":
+        return {
+            "id": "TON",
+            "type": "native",
+            "symbol": "TON",
+            "name": "Toncoin",
+            "decimals": 9,
+            "total_supply": None,
+            "holders": None,
+            "tx_24h": None,
+            "last_activity": None,
+            "sources": [
+                {
+                    "source_name": "ton.org",
+                    "source_url": "https://ton.org",
+                    "fetched_at": now,
+                },
+                {
+                    "source_name": "docs.ton.org",
+                    "source_url": "https://docs.ton.org",
+                    "fetched_at": now,
+                },
+            ],
+            "updated_at": now,
+        }
 
-    data = fetch_token_by_symbol(normalized)
-    if not data:
+    result = fetch_token_by_symbol(normalized)
+    if isinstance(result, dict) and result.get("error"):
+        return {
+            "error": result.get("error") or "unavailable",
+            "reason": result.get("reason"),
+            "symbol": normalized,
+            "status_code": result.get("status_code"),
+            "response_snippet": result.get("response_snippet"),
+            "elapsed_ms": result.get("elapsed_ms"),
+            "updated_at": now,
+            "sources": [
+                {
+                    "source_name": "tokens.swap.coffee",
+                    "source_url": source_url,
+                    "fetched_at": now,
+                }
+            ],
+        }
+
+    data = result.get("data") if isinstance(result, dict) else None
+    if not data or not isinstance(data, dict):
         return {
             "error": "unavailable",
+            "symbol": normalized,
             "updated_at": now,
             "sources": [
                 {
@@ -175,21 +245,11 @@ async def get_token(symbol: str):
         "type": "jetton",
         "symbol": data.get("symbol") or normalized,
         "name": data.get("name"),
-        "decimals": _safe_int(data.get("decimals")),
+        "decimals": None,
         "total_supply": data.get("total_supply") or data.get("supply") or data.get("totalSupply"),
-        "holders": _safe_int(
-            data.get("holders")
-            or data.get("holders_count")
-            or stats.get("holders_count")
-        ),
-        "tx_24h": _safe_int(
-            data.get("tx_24h")
-            or data.get("tx24h")
-            or data.get("transactions_24h")
-        ),
-        "last_activity": data.get("last_activity")
-        or data.get("last_trade_at")
-        or data.get("created_at"),
+        "holders": stats.get("holders_count") or data.get("holders") or data.get("holders_count"),
+        "tx_24h": data.get("tx_24h") or data.get("tx24h") or data.get("transactions_24h"),
+        "last_activity": data.get("last_activity") or data.get("last_trade_at") or data.get("created_at"),
         "sources": [
             {
                 "source_name": "tokens.swap.coffee",
@@ -199,9 +259,6 @@ async def get_token(symbol: str):
         ],
         "updated_at": now,
     }
-
-    by_symbol[normalized] = token
-    save_tokens(list(by_symbol.values()))
 
     return token
 

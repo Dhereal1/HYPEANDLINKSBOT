@@ -51,6 +51,27 @@ def _safe_int_like(value):
         return value
 
 
+def sanitize_fact_value(value):
+    if value is None:
+        return "unknown"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value).strip()
+    text = text.replace("{", "").replace("}", "").replace("[", "").replace("]", "")
+    text = text.replace('"', "").replace("`", "")
+    return text if text else "unknown"
+
+
+def build_regen_system_prompt(lang: str) -> str:
+    return (
+        f"{BASE_SYSTEM_PROMPT} {LANGUAGE_SYSTEM_HINT[lang]} "
+        "Output plain text only. Never output JSON, code blocks, or key-value objects. "
+        "When token facts are present, keep this format exactly: "
+        "Name, Symbol, Type; Total supply (tokens), Holders, Last activity; Sources (optional). "
+        "Preserve numeric values exactly."
+    )
+
+
 def format_token_facts_block(text: str) -> str | None:
     """Convert raw token JSON text into a compact human-readable facts block."""
     if not text:
@@ -67,22 +88,20 @@ def format_token_facts_block(text: str) -> str | None:
     if not isinstance(payload, dict):
         return None
 
-    name = payload.get("name") or "unknown"
-    symbol = payload.get("symbol") or "unknown"
-    token_type = payload.get("type") or payload.get("token_type") or "unknown"
+    name = sanitize_fact_value(payload.get("name"))
+    symbol = sanitize_fact_value(payload.get("symbol"))
+    token_type = sanitize_fact_value(payload.get("type") or payload.get("token_type"))
     total_supply = (
         payload.get("total_supply")
         or payload.get("supply")
         or payload.get("totalSupply")
-        or "unknown"
     )
-    holders = payload.get("holders") or payload.get("holder_count") or payload.get("holders_count") or "unknown"
+    holders = payload.get("holders") or payload.get("holder_count") or payload.get("holders_count")
     last_activity = (
         payload.get("last_activity")
         or payload.get("lastActivity")
         or payload.get("updated_at")
         or payload.get("updatedAt")
-        or "unknown"
     )
     sources = payload.get("sources")
 
@@ -91,16 +110,16 @@ def format_token_facts_block(text: str) -> str | None:
         f"Symbol: {symbol}",
         f"Type: {token_type}",
         "",
-        f"Total supply (tokens): {_safe_int_like(total_supply)}",
-        f"Holders: {_safe_int_like(holders)}",
-        f"Last activity: {last_activity}",
+        f"Total supply (tokens): {sanitize_fact_value(_safe_int_like(total_supply))}",
+        f"Holders: {sanitize_fact_value(_safe_int_like(holders))}",
+        f"Last activity: {sanitize_fact_value(last_activity)}",
     ]
 
     if isinstance(sources, list) and sources:
-        source_text = ", ".join(str(item) for item in sources[:3])
+        source_text = ", ".join(sanitize_fact_value(item) for item in sources[:3])
         lines.extend(["", f"Sources: {source_text}"])
     elif isinstance(sources, str) and sources.strip():
-        lines.extend(["", f"Sources: {sources.strip()}"])
+        lines.extend(["", f"Sources: {sanitize_fact_value(sources)}"])
 
     return "\n".join(lines)
 
@@ -108,6 +127,53 @@ def format_token_facts_block(text: str) -> str | None:
 def looks_like_json(text: str) -> bool:
     value = text.strip()
     return (value.startswith("{") and value.endswith("}")) or (value.startswith("[") and value.endswith("]"))
+
+
+def extract_fact_from_loose_text(text: str, keys: list[str]) -> str:
+    if not text:
+        return "unknown"
+    lower_text = text.lower()
+    for key in keys:
+        idx = lower_text.find(key.lower())
+        if idx == -1:
+            continue
+        suffix = text[idx + len(key):]
+        if ":" in suffix[:3]:
+            suffix = suffix[suffix.find(":") + 1:]
+        elif "=" in suffix[:3]:
+            suffix = suffix[suffix.find("=") + 1:]
+        value = suffix.strip().splitlines()[0][:120]
+        value = value.split(",")[0].strip()
+        cleaned = sanitize_fact_value(value)
+        if cleaned and cleaned != "unknown":
+            return cleaned
+    return "unknown"
+
+
+def format_token_facts_block_from_loose_text(text: str) -> str | None:
+    if not looks_like_json(text):
+        return None
+
+    name = extract_fact_from_loose_text(text, ["name"])
+    symbol = extract_fact_from_loose_text(text, ["symbol", "ticker"])
+    token_type = extract_fact_from_loose_text(text, ["type", "token_type"])
+    total_supply = extract_fact_from_loose_text(text, ["total_supply", "totalSupply", "supply"])
+    holders = extract_fact_from_loose_text(text, ["holders", "holder_count", "holders_count"])
+    last_activity = extract_fact_from_loose_text(text, ["last_activity", "lastActivity", "updated_at", "updatedAt"])
+    sources = extract_fact_from_loose_text(text, ["sources", "source"])
+
+    lines = [
+        f"Name: {name}",
+        f"Symbol: {symbol}",
+        f"Type: {token_type}",
+        "",
+        f"Total supply (tokens): {total_supply}",
+        f"Holders: {holders}",
+        f"Last activity: {last_activity}",
+    ]
+    if sources != "unknown":
+        lines.extend(["", f"Sources: {sources}"])
+    return "\n".join(lines)
 
 
 async def get_db_pool():
@@ -509,6 +575,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Send initial "thinking" message
     sent_message = await update.message.reply_text("Thinking...")
+    await context.bot.edit_message_reply_markup(
+        chat_id=sent_message.chat_id,
+        message_id=sent_message.message_id,
+        reply_markup=build_language_keyboard(sent_message.message_id)
+    )
     _message_prompt_map[(sent_message.chat_id, sent_message.message_id)] = message_text
     
     # Stream AI response and edit the message as chunks arrive
@@ -549,7 +620,6 @@ async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT
 
     telegram_id = update.effective_user.id
     chat_id = query.message.chat_id
-    language_hint = LANGUAGE_SYSTEM_HINT[lang]
 
     source_text = _message_prompt_map.get((chat_id, target_message_id))
     source_role = "user"
@@ -571,15 +641,11 @@ async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT
         return
 
     if source_role == "assistant":
-        facts_block = format_token_facts_block(source_text)
+        facts_block = format_token_facts_block(source_text) or format_token_facts_block_from_loose_text(source_text)
         if facts_block:
-            assistant_input = facts_block
-            user_content = f"Rewrite the following text in the target language:\n\n{assistant_input}"
-        elif looks_like_json(source_text):
             user_content = (
-                "Rewrite token facts in the target language using this plain template:\n"
-                "Name, Symbol, Type; Total supply (tokens), Holders, Last activity; Sources (optional). "
-                "No JSON."
+                "Rewrite token facts in the target language using plain text only.\n\n"
+                f"{facts_block}"
             )
         else:
             user_content = f"Rewrite the following text in the target language:\n\n{source_text}"
@@ -587,11 +653,16 @@ async def handle_language_callback(update: Update, context: ContextTypes.DEFAULT
         user_content = source_text
 
     messages = [
-        {"role": "system", "content": f"{BASE_SYSTEM_PROMPT} {language_hint}"},
+        {"role": "system", "content": build_regen_system_prompt(lang)},
         {"role": "user", "content": user_content}
     ]
 
     sent_message = await context.bot.send_message(chat_id=chat_id, text="Thinking...")
+    await context.bot.edit_message_reply_markup(
+        chat_id=sent_message.chat_id,
+        message_id=sent_message.message_id,
+        reply_markup=build_language_keyboard(sent_message.message_id)
+    )
     _message_prompt_map[(sent_message.chat_id, sent_message.message_id)] = source_text
 
     await stream_ai_response(

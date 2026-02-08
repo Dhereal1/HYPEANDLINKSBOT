@@ -104,8 +104,14 @@ def build_regen_system_prompt(lang: str) -> str:
         if lang == "ru"
         else "Respond only in English. Write naturally in English prose."
     )
+    domain_instruction = (
+        "Do not translate or change domain names or website names (for example, swap.coffee). Keep them exactly as-is. "
+        if lang == "ru"
+        else ""
+    )
     return (
         f"{BASE_SYSTEM_PROMPT} {language_instruction} "
+        f"{domain_instruction}"
         "Output plain text only. "
         "Do not output JSON, code blocks, CSV, or key value lists. "
         "If token facts are provided, explain them in complete sentences. "
@@ -127,6 +133,20 @@ def looks_like_raw_dump(text: str) -> bool:
     if one_line.count(";") >= 3:
         return True
     return any(pattern.search(text) for pattern in RAW_DUMP_PATTERNS)
+
+
+def normalize_ru_terms(text: str) -> str:
+    replacements = {
+        " circulation ": " в обращении ",
+        " holders ": " владельцев ",
+        " tokens ": " токенов ",
+        " holder ": " владелец ",
+        " token ": " токен ",
+    }
+    normalized = f" {text} "
+    for src, dst in replacements.items():
+        normalized = normalized.replace(src, dst)
+    return normalized.strip()
 
 
 async def rewrite_as_prose(text: str, lang: str) -> str | None:
@@ -681,6 +701,9 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
                     rewritten_text = await rewrite_as_prose(response_text, response_lang)
                     if rewritten_text:
                         response_text = rewritten_text
+                primary_system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
+                if "Respond only in Russian" in primary_system:
+                    response_text = normalize_ru_terms(response_text)
                 final_text = response_text + signature
                 if cancel_event.is_set():
                     return

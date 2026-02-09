@@ -6,7 +6,7 @@ import time
 import importlib
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, CallbackQueryHandler, filters
-from telegram.error import Conflict, TelegramError
+from telegram.error import Conflict, TelegramError, NetworkError, TimedOut, RetryAfter
 import asyncpg
 import httpx
 from datetime import datetime, timezone
@@ -550,6 +550,14 @@ async def ensure_user_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Don't return anything - let other handlers process the update
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    err = context.error
+    if isinstance(err, (NetworkError, TimedOut, RetryAfter)):
+        print(f"[bot_error] transient: {type(err).__name__}: {err}")
+        return
+    print(f"[bot_error] {type(err).__name__}: {err}")
+
+
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Create inline keyboard with button
     app_url = os.getenv('APP_URL')
@@ -577,7 +585,7 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
     
     accumulated_text = ""
     last_edit_time = asyncio.get_event_loop().time()
-    edit_interval = 1.0  # Edit message every 1 second to avoid rate limits
+    edit_interval = float(os.getenv("EDIT_INTERVAL_SECONDS", "1.5"))
     last_sent_text = ""  # Track last sent text to avoid "message not modified" errors
     current_message_id = message_id
     key = (chat_id, message_id)
@@ -711,7 +719,8 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
                     response_text = accumulated_text
                 if cancel_event.is_set():
                     return
-                if looks_like_raw_dump(response_text):
+                rewrite_guard_enabled = os.getenv("ENABLE_REWRITE_GUARD", "1").lower() in ("1", "true", "yes", "on")
+                if rewrite_guard_enabled and looks_like_raw_dump(response_text):
                     primary_system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
                     response_lang = "ru" if "Respond only in Russian" in primary_system else "en"
                     rewritten_text = await rewrite_as_prose(response_text, response_lang)
@@ -961,6 +970,7 @@ def main():
         raise ValueError("Environment variable 'BOT_TOKEN' is not set")
     
     app = ApplicationBuilder().token(bot_token).post_init(post_init).post_shutdown(shutdown).build()
+    app.add_error_handler(error_handler)
     
     # Add handler to ensure user exists in DB on every message (non-blocking)
     # This runs first, before command handlers

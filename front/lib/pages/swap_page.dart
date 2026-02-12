@@ -109,6 +109,13 @@ class _SwapPageState extends State<SwapPage> {
     'm': 'min1',
   };
 
+  static const List<String> _resolutionOrder = ['d', 'h', 'q', 'm'];
+  static const double _resolutionSwipeVelocityThreshold = 200.0;
+  // Keep screen edges free so EdgeSwipeBack can handle back gestures.
+  static const double _edgeSwipeGuardWidth = 56.0;
+
+  double? _horizontalDragStartX;
+
   // Maximum time ranges for each resolution (in days)
   static const Map<String, int> _maxTimeRanges = {
     'day1': 365, // 365 days
@@ -235,11 +242,7 @@ class _SwapPageState extends State<SwapPage> {
     final isSelected = _selectedResolution == _resolutionMap[key];
     return GestureDetector(
       onTap: () {
-        AppHaptic.heavy();
-        setState(() {
-          _selectedResolution = _resolutionMap[key]!;
-        });
-        _fetchChartData();
+        _setResolutionByKey(key);
       },
       child: Container(
         height: 20,
@@ -257,6 +260,73 @@ class _SwapPageState extends State<SwapPage> {
         ),
       ),
     );
+  }
+
+  void _setResolutionByKey(String key) {
+    final targetResolution = _resolutionMap[key];
+    if (targetResolution == null || _selectedResolution == targetResolution) {
+      return;
+    }
+
+    AppHaptic.heavy();
+    setState(() {
+      _selectedResolution = targetResolution;
+    });
+    _fetchChartData();
+  }
+
+  void _selectResolutionToLeft() {
+    final currentKey = _resolutionMap.entries
+        .firstWhere(
+          (entry) => entry.value == _selectedResolution,
+          orElse: () => const MapEntry('d', 'day1'),
+        )
+        .key;
+    final currentIndex = _resolutionOrder.indexOf(currentKey);
+    if (currentIndex > 0) {
+      _setResolutionByKey(_resolutionOrder[currentIndex - 1]);
+    }
+  }
+
+  void _selectResolutionToRight() {
+    final currentKey = _resolutionMap.entries
+        .firstWhere(
+          (entry) => entry.value == _selectedResolution,
+          orElse: () => const MapEntry('d', 'day1'),
+        )
+        .key;
+    final currentIndex = _resolutionOrder.indexOf(currentKey);
+    if (currentIndex >= 0 && currentIndex < _resolutionOrder.length - 1) {
+      _setResolutionByKey(_resolutionOrder[currentIndex + 1]);
+    }
+  }
+
+  bool _isCenterSwipeStart(double startX, double width) {
+    final leftBound = _edgeSwipeGuardWidth;
+    final rightBound = width - _edgeSwipeGuardWidth;
+    return startX > leftBound && startX < rightBound;
+  }
+
+  void _onResolutionSwipeStart(DragStartDetails details) {
+    _horizontalDragStartX = details.globalPosition.dx;
+  }
+
+  void _onResolutionSwipeEnd(DragEndDetails details, BuildContext context) {
+    final startX = _horizontalDragStartX;
+    _horizontalDragStartX = null;
+    if (startX == null) return;
+
+    final width = MediaQuery.of(context).size.width;
+    if (!_isCenterSwipeStart(startX, width)) {
+      return;
+    }
+
+    final velocity = details.primaryVelocity ?? 0.0;
+    if (velocity > _resolutionSwipeVelocityThreshold) {
+      _selectResolutionToLeft(); // swipe right -> previous
+    } else if (velocity < -_resolutionSwipeVelocityThreshold) {
+      _selectResolutionToRight(); // swipe left -> next
+    }
   }
 
   String _getResolutionLabel() {
@@ -1496,11 +1566,16 @@ class _SwapPageState extends State<SwapPage> {
             // Calculate padding statically to avoid rebuilds when keyboard opens
             // The logo visibility doesn't actually change when keyboard opens,
             // so we don't need to listen to fullscreenNotifier here
-            return Padding(
-              padding: EdgeInsets.only(
-                  bottom: _getAdaptiveBottomPadding(),
-                  top: GlobalLogoBar.getContentTopPadding()),
-              child: Center(
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: _onResolutionSwipeStart,
+              onHorizontalDragEnd: (details) =>
+                  _onResolutionSwipeEnd(details, context),
+              child: Padding(
+                padding: EdgeInsets.only(
+                    bottom: _getAdaptiveBottomPadding(),
+                    top: GlobalLogoBar.getContentTopPadding()),
+                child: Center(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
@@ -2347,6 +2422,7 @@ class _SwapPageState extends State<SwapPage> {
                 ),
               ),
               ),
+            ),
             );
           },
         ),

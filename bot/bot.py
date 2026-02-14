@@ -376,11 +376,11 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
     """
     ai_backend_url = (os.getenv('AI_BACKEND_URL') or "http://127.0.0.1:8000").strip().rstrip("/")
     stream_start = time.perf_counter()
-    api_key = os.getenv('API_KEY')
+    api_key = os.getenv('SELF_API_KEY') or os.getenv('API_KEY')
     if not ai_backend_url:
         raise ValueError("AI_BACKEND_URL environment variable must be set")
     if not api_key:
-        raise ValueError("API_KEY environment variable must be set")
+        raise ValueError("SELF_API_KEY environment variable must be set")
     
     accumulated_text = ""
     last_edit_time = asyncio.get_event_loop().time()
@@ -789,7 +789,7 @@ def main():
     if not bot_token:
         raise ValueError("Environment variable 'BOT_TOKEN' is not set")
     ai_backend_url = (os.getenv('AI_BACKEND_URL') or "http://127.0.0.1:8000").strip().rstrip("/")
-    api_key = os.getenv('API_KEY') or ""
+    api_key = os.getenv('SELF_API_KEY') or os.getenv('API_KEY') or ""
     key_preview = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) >= 8 else "(missing/short)"
     
     app = ApplicationBuilder().token(bot_token).post_init(post_init).post_shutdown(shutdown).build()
@@ -809,7 +809,7 @@ def main():
     
     print("Bot starting...")
     print(f"AI_BACKEND_URL={ai_backend_url}")
-    print(f"API_KEY preview={key_preview}")
+    print(f"SELF_API_KEY preview={key_preview}")
     try:
         app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
     except Conflict as e:

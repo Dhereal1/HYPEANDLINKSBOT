@@ -13,11 +13,11 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.API_KEY || '';
-  const backendUrl = process.env.AI_BACKEND_URL || '';
+  const apiKey = process.env.BOT_API_KEY || process.env.API_KEY || '';
+  const backendUrl = process.env.BOT_API_URL || process.env.AI_BACKEND_URL || '';
   if (!apiKey || !backendUrl) {
     return res.status(503).json({
-      error: 'Server is not configured: API_KEY or AI_BACKEND_URL is missing',
+      error: 'Server is not configured: BOT_API_KEY or BOT_API_URL is missing',
     });
   }
 

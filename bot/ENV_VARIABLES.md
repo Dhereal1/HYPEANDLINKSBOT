@@ -23,7 +23,7 @@
 - **Example**: `https://your-ai-backend.com` or `https://api.example.com`
 - **Usage**: Endpoint for streaming AI responses to user messages
 
-### `API_KEY`
+### `SELF_API_KEY`
 - **Description**: API key for authenticating with the AI backend
 - **Required**: Yes (if using AI chat features)
 - **Example**: `your-secret-api-key-here`
@@ -47,7 +47,7 @@
    BOT_TOKEN=your_telegram_bot_token
    DATABASE_URL=postgresql://user:password@host:port/database
    AI_BACKEND_URL=https://your-ai-backend.com
-   API_KEY=your-api-key
+   SELF_API_KEY=your-api-key
    APP_URL=https://your-app.vercel.app
    ```
 
@@ -60,7 +60,7 @@
    railway variables set BOT_TOKEN=your_token
    railway variables set DATABASE_URL=your_database_url
    railway variables set AI_BACKEND_URL=your_ai_url
-   railway variables set API_KEY=your_api_key
+   railway variables set SELF_API_KEY=your_api_key
    railway variables set APP_URL=your_app_url
    ```
 
@@ -72,4 +72,4 @@ The bot talks only to the **AI backend**. The AI backend can use a **RAG service
 - Never commit `.env` files to version control
 - Railway environment variables take precedence over `.env` file
 - Database connection supports SSL for secure connections
-- AI features will fail gracefully if `AI_BACKEND_URL` or `API_KEY` are missing when needed
+- AI features will fail gracefully if `AI_BACKEND_URL` or `SELF_API_KEY` are missing when needed

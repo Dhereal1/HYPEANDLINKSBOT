@@ -40,15 +40,19 @@ This is the Flutter frontend for the XP7K Telegram Mini App.
    Create a `.env` file in the `front` directory:
    ```bash
    cd front
-   echo "API_KEY=your_actual_api_key_here" > .env
+   cat > .env <<'EOF'
+   BOT_API_URL=http://127.0.0.1:8000
+   BOT_API_KEY=change-me-shared-secret
+   EOF
    ```
    
    Or manually create `.env` with:
    ```
-   API_KEY=your_actual_api_key_here
+   BOT_API_URL=http://127.0.0.1:8000
+   BOT_API_KEY=change-me-shared-secret
    ```
    
-   > **Note**: The `.env` file is gitignored and won't be committed. For production, the API key is loaded from Vercel environment variables.
+   > **Note**: The `.env` file is gitignored and won't be committed. For production, set the same env vars in Vercel project settings.
 
 2. Get dependencies:
    ```bash

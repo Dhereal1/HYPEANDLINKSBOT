@@ -459,24 +459,54 @@ def _sanitize_ticker_narrative(narrative: str, user_lang: str) -> str:
     text = re.sub(r"\s+", " ", (narrative or "").strip())
     if not text:
         return _narrative_fallback(user_lang)
-    # Guardrail: block metric restatements and mixed-script garbage.
-    if re.search(r"\d", text) or _CJK_RE.search(text):
-        return _narrative_fallback(user_lang)
-    sentences = [s for s in re.split(r"[.!?]+", text) if s.strip()]
-    if len(sentences) < 2 or len(sentences) > 4:
-        return _narrative_fallback(user_lang)
-    speculative_en = (
-        "will", "guarantee", "guaranteed", "certain", "definitely",
-        "mass adoption", "profit", "moon", "10x", "100x",
-    )
-    speculative_ru = (
-        "будет", "гарант", "точно", "обязательно", "массов",
-        "прибыл", "икс", "рост в", "взлет",
-    )
-    text_lower = text.lower()
-    if any(token in text_lower for token in speculative_en + speculative_ru):
+    # Keep narrative permissive so model can use available facts imaginatively.
+    # Only block obvious malformed/mixed-script garbage.
+    if _CJK_RE.search(text):
         return _narrative_fallback(user_lang)
     return text
+
+
+def _normalize_paragraph_spacing(text: str) -> str:
+    """Keep exactly one empty line between sections/paragraphs."""
+    cleaned = (text or "").replace("\r\n", "\n")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _strip_stat_repetition(narrative: str, user_lang: str) -> str:
+    """Remove narrative sentences that just repeat stats already shown above."""
+    text = (narrative or "").strip()
+    if not text:
+        return text
+
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    stat_en = ("supply", "holders", "holder", "last activity", "market cap", "circulating")
+    stat_ru = ("выпуск", "держател", "холдер", "последн", "активност", "капитализац")
+    stat_terms = stat_ru if user_lang == "ru" else stat_en
+
+    filtered = []
+    for part in parts:
+        lower = part.lower()
+        if any(term in lower for term in stat_terms):
+            continue
+        filtered.append(part.strip())
+
+    # If we stripped too aggressively, keep original so we don't return empty output.
+    cleaned = " ".join(p for p in filtered if p).strip()
+    return cleaned or text
+
+
+def _descriptive_narrative_fallback(name: str, symbol: str, user_lang: str) -> str:
+    token_label = name or symbol or "This token"
+    if user_lang == "ru":
+        return (
+            f"{token_label} подаётся как мемный актив в экосистеме TON: образ строится вокруг узнаваемого интернет-персонажа и культуры шеринга.\n\n"
+            "Обычно такие токены появляются как социальный маркер сообщества: людям важны не столько метрики, сколько идентичность, юмор и участие в общем нарративе."
+        )
+    return (
+        f"{token_label} is framed as a meme asset within the TON ecosystem, built around recognizable internet character culture and shareable identity.\n\n"
+        "Tokens like this usually emerge as community symbols: people engage less for hard metrics and more for vibe, belonging, and participation in a common narrative."
+    )
 
 
 def _build_deterministic_ticker_overview(ticker_data: Dict[str, Any], user_lang: str) -> str:
@@ -859,6 +889,8 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     ticker_data = None
     ticker_facts_text = None
     ticker_analysis_heading = None
+    ton_only_narrative = False
+    ticker_name_for_narrative = ""
     
     # Get last user message
     user_last = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
@@ -908,7 +940,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     # Narrative is generated later by the LLM under strict guardrails.
     if ticker_mode and ticker_data:
         ticker_facts_text = _build_ticker_facts_block(ticker_data, ticker_symbol, user_lang)
-        ticker_analysis_heading = "\n💡 Обзор:" if user_lang == "ru" else "\n💡 Overview:"
+        ticker_analysis_heading = "💡 Нарратив:" if user_lang == "ru" else "💡 Narrative:"
 
     # STEP 2: Try general RAG query if not in ticker mode
     if RAG_URL and not ticker_mode and user_last:
@@ -937,41 +969,55 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     messages_dict = []
     
     if ticker_mode and ticker_data:
-        # Ticker mode: facts are rendered deterministically; LLM writes analysis only.
-        # Build MINIMAL facts for overview generation (no numbers to tempt the model)
-        facts_for_overview = {
+        # Ticker mode: facts are rendered deterministically; LLM writes narrative.
+        facts_for_narrative = {
             "symbol": ticker_data.get("symbol") or ticker_symbol,
+            "name": ticker_data.get("name"),
             "type": ticker_data.get("type") or "token",
+            "description": ticker_data.get("description"),
+            "total_supply": ticker_data.get("total_supply"),
+            "holders": ticker_data.get("holders"),
         }
-        
-        # Only add last_activity if present (to allow "recent activity" context)
+
         last_activity = ticker_data.get("last_activity")
         if last_activity:
-            facts_for_overview["last_activity"] = last_activity
+            facts_for_narrative["last_activity"] = last_activity
+
+        source_name = _resolve_token_source(ticker_data)
+        ton_only_from_source = "tokens.swap.coffee" in source_name.lower()
+        ton_only_narrative = ton_only_from_source
+        ticker_name_for_narrative = str(ticker_data.get("name") or ticker_symbol or "")
+        ton_scope_rule = (
+            "- Treat this asset strictly as part of the TON ecosystem.\n"
+            "- DO NOT claim or imply that it belongs to any non-TON blockchain."
+            if ton_only_from_source
+            else "- Keep blockchain context consistent with REFERENCE_FACTS."
+        )
 
         ticker_prompt = (
             f"Reply ONLY in {'Russian' if user_lang == 'ru' else 'English'}.\n"
-            "Write 2-4 sentences of safe qualitative analysis for this token type.\n"
+            "Write a concise 2-4 sentence narrative.\n"
             "\n"
-            "STRICT RULES:\n"
-            "- DO NOT mention any numbers, metrics, or statistics\n"
-            "- DO NOT repeat facts already shown above\n"
-            "- DO NOT invent facts not in <REFERENCE_FACTS> (no claims about Telegram, exchanges, listings, control, profitability, mass adoption)\n"
+            "NARRATIVE RULES:\n"
+            "- Use REFERENCE_FACTS as the primary anchor.\n"
+            "- You may use general model knowledge for qualitative context, but do not fabricate specific factual claims.\n"
+            "- Mention token name or symbol naturally in the narrative.\n"
+            "- If description exists in REFERENCE_FACTS, incorporate it.\n"
+            "- Do NOT restate supply/holders/last activity or other numeric stats already shown in the stats block.\n"
+            "- Focus on the descriptive story: what the meme identity is, why this token likely appeared, and what community narrative it represents.\n"
+            "- It is acceptable to use soft hypothesis language (for example: likely, may, often) for narrative framing.\n"
+            "- Avoid investment advice, guaranteed outcomes, or hard predictions.\n"
             "- DO NOT use any non-Russian characters if Russian mode (no English, Chinese, Arabic, etc.)\n"
             "- DO NOT use any non-English characters if English mode (no Russian, Chinese, etc.)\n"
-            "- Focus ONLY on general characteristics that apply to this TOKEN TYPE\n"
-            "- Do NOT make claims about specific adoption, popularity, or success\n"
+            f"{ton_scope_rule}\n"
             "\n"
-            "If you cannot write 2-4 safe sentences with the data provided, output exactly:\n"
-            f"{'Недостаточно данных для анализа.' if user_lang == 'ru' else 'Insufficient data for analysis.'}\n"
-            "\n"
-            "Good example (EN): 'This jetton operates within the TON blockchain ecosystem. The token structure indicates standard fungible asset characteristics.'\n"
-            "Bad example (EN): 'This token has massive adoption with millions of holders.' (invents claims not in data)\n"
+            "Always provide a narrative using available reference facts.\n"
+            "Keep it concise and grounded; avoid fabricated specifics.\n"
         )
-        
+
         reference_facts = (
             "<REFERENCE_FACTS>\n"
-            + json.dumps(facts_for_overview, ensure_ascii=False, indent=2)
+            + json.dumps(facts_for_narrative, ensure_ascii=False, indent=2)
             + "\n</REFERENCE_FACTS>"
         )
         
@@ -1069,7 +1115,27 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
         if not ticker_facts_text:
             return narrative
         narrative_clean = _sanitize_ticker_narrative(narrative, user_lang)
-        return f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n{narrative_clean}"
+        narrative_clean = _strip_stat_repetition(narrative_clean, user_lang)
+        if ton_only_narrative:
+            non_ton_chain = re.search(
+                r"\b(bitcoin|ethereum|dogecoin|solana|tron|bsc|binance\s+smart\s+chain|polygon|avalanche)\b",
+                narrative_clean,
+                flags=re.IGNORECASE,
+            )
+            if non_ton_chain:
+                narrative_clean = _descriptive_narrative_fallback(
+                    ticker_name_for_narrative,
+                    str(ticker_symbol or ""),
+                    user_lang,
+                )
+        if not narrative_clean.strip():
+            narrative_clean = _descriptive_narrative_fallback(
+                ticker_name_for_narrative,
+                str(ticker_symbol or ""),
+                user_lang,
+            )
+        response_text = f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n\n{narrative_clean}"
+        return _normalize_paragraph_spacing(response_text)
 
     async def generate_ollama_response():
         inference_start = time.perf_counter()
@@ -1078,7 +1144,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             if ticker_facts_text:
-                prefix = f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n"
+                prefix = _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n")
                 yield json.dumps({"token": prefix, "done": False}) + "\n"
                 prefix_sent = True
             async with client.stream(
@@ -1105,7 +1171,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                             else "Analysis is unavailable right now."
                         )
                         if not prefix_sent:
-                            yield json.dumps({"token": f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n", "done": False}) + "\n"
+                            yield json.dumps({"token": _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n"), "done": False}) + "\n"
                         yield json.dumps({"response": fallback, "done": True}) + "\n"
                     else:
                         yield json.dumps({"error": f"Ollama error: {error_detail}"}) + "\n"
@@ -1159,7 +1225,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             if ticker_facts_text:
-                prefix = f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n"
+                prefix = _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n")
                 yield json.dumps({"token": prefix, "done": False}) + "\n"
                 prefix_sent = True
             if request.stream:
@@ -1189,7 +1255,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                                 else "Analysis is unavailable right now."
                             )
                             if not prefix_sent:
-                                yield json.dumps({"token": f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n", "done": False}) + "\n"
+                                yield json.dumps({"token": _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n"), "done": False}) + "\n"
                             yield json.dumps({"response": fallback, "done": True}) + "\n"
                         else:
                             yield json.dumps({"error": f"OpenAI error: {error_detail}"}) + "\n"
@@ -1247,7 +1313,7 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                         else "Analysis is unavailable right now."
                     )
                     if not prefix_sent:
-                        yield json.dumps({"token": f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n", "done": False}) + "\n"
+                        yield json.dumps({"token": _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n{ticker_analysis_heading}\n"), "done": False}) + "\n"
                     yield json.dumps({"response": fallback, "done": True}) + "\n"
                 else:
                     yield json.dumps({"error": f"OpenAI error: {error_detail}"}) + "\n"

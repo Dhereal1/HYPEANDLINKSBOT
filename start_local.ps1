@@ -2,7 +2,9 @@
 param(
   [switch]$Reload,
   [switch]$ForegroundBot,
-  [switch]$StopOllama
+  [switch]$StopOllama,
+  [switch]$OpenLogWindows,
+  [switch]$LogsInServiceWindows
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,6 +64,103 @@ function Wait-ForHttpReady {
     }
   }
   return $false
+}
+
+function Wait-ForFrontendReady {
+  param(
+    [string]$BaseUrl,
+    [int]$TimeoutSeconds = 120,
+    [int]$IntervalMilliseconds = 800,
+    [int]$MinMainDartJsBytes = 50000,
+    [int]$RootStableChecks = 3,
+    [int]$FallbackAfterSeconds = 20
+  )
+
+  $base = $BaseUrl.TrimEnd('/')
+  $startTime = Get-Date
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $supportsBasicParsing = (Get-Command Invoke-WebRequest).Parameters.ContainsKey("UseBasicParsing")
+  $stableRootHits = 0
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $rootReqParams = @{
+        Uri = $base
+        TimeoutSec = 8
+      }
+      if ($supportsBasicParsing) {
+        $rootReqParams.UseBasicParsing = $true
+      }
+      $rootResp = Invoke-WebRequest @rootReqParams
+      if ($rootResp.StatusCode -ge 200 -and $rootResp.StatusCode -lt 400) {
+        $stableRootHits++
+
+        $assetReqParams = @{
+          Uri = "$base/main.dart.js"
+          TimeoutSec = 8
+        }
+        if ($supportsBasicParsing) {
+          $assetReqParams.UseBasicParsing = $true
+        }
+
+        try {
+          $assetResp = Invoke-WebRequest @assetReqParams
+          $contentLength = 0
+          if ($null -ne $assetResp.Content) {
+            $contentLength = $assetResp.Content.Length
+          }
+          if ($assetResp.StatusCode -ge 200 -and $assetResp.StatusCode -lt 400 -and $contentLength -ge $MinMainDartJsBytes) {
+            return $true
+          }
+        } catch {}
+
+        $elapsedSeconds = ((Get-Date) - $startTime).TotalSeconds
+        if ($stableRootHits -ge $RootStableChecks -and $elapsedSeconds -ge $FallbackAfterSeconds) {
+          # Fallback for flutter web-server mode where main.dart.js may be generated lazily.
+          return $true
+        }
+      } else {
+        $stableRootHits = 0
+      }
+    } catch {
+      $stableRootHits = 0
+    }
+
+    Start-Sleep -Milliseconds $IntervalMilliseconds
+  }
+  return $false
+}
+
+function To-SingleQuotedLiteral {
+  param(
+    [string]$Text
+  )
+  if ($null -eq $Text) { return "''" }
+  return "'" + ($Text -replace "'", "''") + "'"
+}
+
+function Start-ServiceLogWindow {
+  param(
+    [string]$Title,
+    [string]$OutLogPath,
+    [string]$ErrLogPath
+  )
+
+  $titleLiteral = To-SingleQuotedLiteral -Text $Title
+  $outLiteral = To-SingleQuotedLiteral -Text $OutLogPath
+  $errLiteral = To-SingleQuotedLiteral -Text $ErrLogPath
+  $cmd = @"
+`$Host.UI.RawUI.WindowTitle = $titleLiteral
+Write-Host "Streaming logs for $Title (Ctrl+C to stop this viewer)" -ForegroundColor Cyan
+Write-Host "OUT: $OutLogPath"
+Write-Host "ERR: $ErrLogPath"
+if (-not (Test-Path -LiteralPath $outLiteral)) { New-Item -ItemType File -Path $outLiteral -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $errLiteral)) { New-Item -ItemType File -Path $errLiteral -Force | Out-Null }
+Get-Content -Path $outLiteral, $errLiteral -Tail 30 -Wait
+"@
+
+  Start-Process -FilePath "powershell.exe" `
+    -ArgumentList @("-NoExit", "-Command", $cmd) `
+    -WindowStyle Normal | Out-Null
 }
 
 $root = (Resolve-Path $PSScriptRoot).Path
@@ -165,11 +264,39 @@ function Ensure-OllamaServerAndModel {
     }
   }
 
-  Write-Host "Ensuring Ollama model is installed: $ModelName"
-  & $OllamaExe pull $ModelName
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to pull Ollama model '$ModelName' (exit code: $LASTEXITCODE)"
+  # Avoid pulling on every startup: check local tags first.
+  $modelInstalled = $false
+  try {
+    $tags = Invoke-RestMethod -Uri "$($OllamaUrl.TrimEnd('/'))/api/tags" -TimeoutSec 8
+    foreach ($m in @($tags.models)) {
+      if ($null -ne $m -and $m.name -eq $ModelName) {
+        $modelInstalled = $true
+        break
+      }
+    }
+  } catch {}
+
+  if ($modelInstalled) {
+    Write-Host "Ollama model already installed locally: $ModelName"
+    return
   }
+
+  $maxAttempts = 4
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Host "Ensuring Ollama model is installed: $ModelName (attempt $attempt/$maxAttempts)"
+    & $OllamaExe pull $ModelName
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+
+    if ($attempt -lt $maxAttempts) {
+      $delaySeconds = [Math]::Pow(2, $attempt)
+      Write-Host "  Ollama pull failed (exit code: $LASTEXITCODE). Retrying in $delaySeconds s..." -ForegroundColor Yellow
+      Start-Sleep -Seconds $delaySeconds
+    }
+  }
+
+  throw "Failed to pull Ollama model '$ModelName' after $maxAttempts attempts."
 }
 
 function Test-OllamaModelHealthy {
@@ -385,19 +512,32 @@ $botErrLog = (Join-Path $logDir "bot.ps.err.log")
 $frontOutLog = (Join-Path $logDir "front.ps.out.log")
 $frontErrLog = (Join-Path $logDir "front.ps.err.log")
 
-$ragProc = Start-Process -FilePath $venvPython `
-  -WorkingDirectory $ragDir `
-  -ArgumentList $ragArgs `
-  -RedirectStandardOutput $ragOutLog `
-  -RedirectStandardError $ragErrLog `
-  -PassThru
+if ($LogsInServiceWindows) {
+  Write-Host "Service logs mode: using each service window output (no extra tail windows)." -ForegroundColor Cyan
+  $ragProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $ragDir `
+    -ArgumentList $ragArgs `
+    -PassThru
 
-$aiProc = Start-Process -FilePath $venvPython `
-  -WorkingDirectory $aiDir `
-  -ArgumentList $aiArgs `
-  -RedirectStandardOutput $aiOutLog `
-  -RedirectStandardError $aiErrLog `
-  -PassThru
+  $aiProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $aiDir `
+    -ArgumentList $aiArgs `
+    -PassThru
+} else {
+  $ragProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $ragDir `
+    -ArgumentList $ragArgs `
+    -RedirectStandardOutput $ragOutLog `
+    -RedirectStandardError $ragErrLog `
+    -PassThru
+
+  $aiProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $aiDir `
+    -ArgumentList $aiArgs `
+    -RedirectStandardOutput $aiOutLog `
+    -RedirectStandardError $aiErrLog `
+    -PassThru
+}
 
 if ($ForegroundBot) {
   Write-Host "Foreground bot mode enabled. Press Ctrl+C to stop all services."
@@ -413,12 +553,19 @@ if ($ForegroundBot) {
   return
 }
 
-$botProc = Start-Process -FilePath $venvPython `
-  -WorkingDirectory $botDir `
-  -ArgumentList "bot.py" `
-  -RedirectStandardOutput $botOutLog `
-  -RedirectStandardError $botErrLog `
-  -PassThru
+if ($LogsInServiceWindows) {
+  $botProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $botDir `
+    -ArgumentList "bot.py" `
+    -PassThru
+} else {
+  $botProc = Start-Process -FilePath $venvPython `
+    -WorkingDirectory $botDir `
+    -ArgumentList "bot.py" `
+    -RedirectStandardOutput $botOutLog `
+    -RedirectStandardError $botErrLog `
+    -PassThru
+}
 
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
   throw "Flutter is not installed or not available in PATH. Cannot start local frontend."
@@ -436,27 +583,48 @@ $frontArgs = @(
   "--dart-define", "BOT_API_URL=http://127.0.0.1:$($env:HTTP_PORT)",
   "--dart-define", "BOT_API_KEY=$($env:SELF_API_KEY)"
 )
-$frontProc = Start-Process -FilePath "flutter" `
-  -WorkingDirectory $frontDir `
-  -ArgumentList $frontArgs `
-  -RedirectStandardOutput $frontOutLog `
-  -RedirectStandardError $frontErrLog `
-  -PassThru
+if ($LogsInServiceWindows) {
+  $frontProc = Start-Process -FilePath "flutter" `
+    -WorkingDirectory $frontDir `
+    -ArgumentList $frontArgs `
+    -PassThru
+} else {
+  $frontProc = Start-Process -FilePath "flutter" `
+    -WorkingDirectory $frontDir `
+    -ArgumentList $frontArgs `
+    -RedirectStandardOutput $frontOutLog `
+    -RedirectStandardError $frontErrLog `
+    -PassThru
+}
+
+if ($OpenLogWindows -and -not $LogsInServiceWindows) {
+  Start-ServiceLogWindow -Title "RAG logs" -OutLogPath $ragOutLog -ErrLogPath $ragErrLog
+  Start-ServiceLogWindow -Title "AI logs" -OutLogPath $aiOutLog -ErrLogPath $aiErrLog
+  Start-ServiceLogWindow -Title "Bot logs" -OutLogPath $botOutLog -ErrLogPath $botErrLog
+  Start-ServiceLogWindow -Title "Front logs" -OutLogPath $frontOutLog -ErrLogPath $frontErrLog
+}
 
 $ragUp = Wait-ForHttpReady -Uri "http://127.0.0.1:8001/health" -TimeoutSeconds 25
 $aiUp = Wait-ForHttpReady -Uri "http://127.0.0.1:8000/" -TimeoutSeconds 25
 $botApiUp = Wait-ForHttpReady -Uri "http://127.0.0.1:$($env:HTTP_PORT)/health" -TimeoutSeconds 25
-$frontUp = Wait-ForHttpReady -Uri "http://127.0.0.1:$frontendPort" -TimeoutSeconds 60
+$frontUp = Wait-ForFrontendReady -BaseUrl "http://127.0.0.1:$frontendPort" -TimeoutSeconds 120
 $ollamaModelUp = $true
 if ($env:LLM_PROVIDER -eq "ollama") {
   $ollamaModelUp = Test-OllamaModelHealthy -OllamaUrl $env:OLLAMA_URL -ModelName $env:OLLAMA_MODEL
 }
 
 Write-Host "Started processes:"
-Write-Host "  RAG PID: $($ragProc.Id)  out: $([System.IO.Path]::GetFullPath($ragOutLog))  err: $([System.IO.Path]::GetFullPath($ragErrLog))"
-Write-Host "  AI  PID: $($aiProc.Id)   out: $([System.IO.Path]::GetFullPath($aiOutLog))   err: $([System.IO.Path]::GetFullPath($aiErrLog))"
-Write-Host "  Bot PID: $($botProc.Id)  out: $([System.IO.Path]::GetFullPath($botOutLog))  err: $([System.IO.Path]::GetFullPath($botErrLog))"
-Write-Host "  Front PID: $($frontProc.Id) out: $([System.IO.Path]::GetFullPath($frontOutLog)) err: $([System.IO.Path]::GetFullPath($frontErrLog))"
+if ($LogsInServiceWindows) {
+  Write-Host "  RAG PID: $($ragProc.Id)  logs: service window"
+  Write-Host "  AI  PID: $($aiProc.Id)   logs: service window"
+  Write-Host "  Bot PID: $($botProc.Id)  logs: service window"
+  Write-Host "  Front PID: $($frontProc.Id) logs: service window"
+} else {
+  Write-Host "  RAG PID: $($ragProc.Id)  out: $([System.IO.Path]::GetFullPath($ragOutLog))  err: $([System.IO.Path]::GetFullPath($ragErrLog))"
+  Write-Host "  AI  PID: $($aiProc.Id)   out: $([System.IO.Path]::GetFullPath($aiOutLog))   err: $([System.IO.Path]::GetFullPath($aiErrLog))"
+  Write-Host "  Bot PID: $($botProc.Id)  out: $([System.IO.Path]::GetFullPath($botOutLog))  err: $([System.IO.Path]::GetFullPath($botErrLog))"
+  Write-Host "  Front PID: $($frontProc.Id) out: $([System.IO.Path]::GetFullPath($frontOutLog)) err: $([System.IO.Path]::GetFullPath($frontErrLog))"
+}
 Write-Host "Health:"
 Write-Host "  RAG /health: $(if ($ragUp) { 'OK' } else { 'FAILED' })"
 Write-Host "  AI  /health: $(if ($aiUp) { 'OK' } else { 'FAILED' })"
@@ -486,7 +654,11 @@ if ($frontUp) {
 Write-Host ""
 Write-Host "Frontend local flow:"
 Write-Host "  Auto-started at: http://127.0.0.1:$frontendPort"
-Write-Host "  Logs: $([System.IO.Path]::GetFullPath($frontOutLog)) / $([System.IO.Path]::GetFullPath($frontErrLog))"
+if ($LogsInServiceWindows) {
+  Write-Host "  Logs: frontend service window"
+} else {
+  Write-Host "  Logs: $([System.IO.Path]::GetFullPath($frontOutLog)) / $([System.IO.Path]::GetFullPath($frontErrLog))"
+}
 Write-Host "Frontend deploy flow (Vercel):"
 Write-Host "  1) cd front"
 Write-Host "  2) bash deploy.sh   (or .\deploy.bat on Windows)"

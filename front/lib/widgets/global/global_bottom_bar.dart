@@ -59,16 +59,21 @@ class GlobalBottomBar extends StatefulWidget {
 
   /// Bottom bar height (for layout/padding so content is not overlayed).
   static double getBottomBarHeight(BuildContext? context) {
-    return barHeight;
+    return _GlobalBottomBarState._currentBarHeight;
   }
 }
 
 class _GlobalBottomBarState extends State<GlobalBottomBar> {
   static bool _isAiPageOpen = false;
+  static double _currentBarHeight = GlobalBottomBar.barHeight;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  final GlobalKey _textFieldKey = GlobalKey();
+  final ScrollController _inputScrollController = ScrollController();
   bool _isFocused = false;
+  static const int _maxVisibleLines = 11;
+  static const double _fontSize = 15.0;
+  static const double _lineHeight = 1.0;
+  static const double _verticalPadding = 22.0;
 
   @override
   void initState() {
@@ -89,15 +94,9 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
     // Listen to global unfocus requests
     GlobalBottomBar._focusNotifier.addListener(_onGlobalFocusChange);
     _controller.addListener(() {
-      if (_controller.text.contains('\n')) {
-        final textWithoutNewline = _controller.text.replaceAll('\n', '');
-        _controller.value = TextEditingValue(
-          text: textWithoutNewline,
-          selection: TextSelection.collapsed(offset: textWithoutNewline.length),
-        );
-      }
       setState(() {});
     });
+    _inputScrollController.addListener(_onInputScrollChanged);
   }
 
   void _onGlobalFocusChange() {
@@ -111,9 +110,17 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
     GlobalBottomBar._focusNotifier.removeListener(_onGlobalFocusChange);
     GlobalBottomBar._controllerInstance = null;
     GlobalBottomBar._submitCurrentInputCallback = null;
+    _inputScrollController.removeListener(_onInputScrollChanged);
+    _inputScrollController.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onInputScrollChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _navigateToNewPage() {
@@ -138,158 +145,175 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
     AiConversationController.instance.submitPrompt(text);
   }
 
+  int _computeVisualLineCount({
+    required String text,
+    required TextStyle style,
+    required double maxWidth,
+  }) {
+    if (maxWidth <= 0) return 1;
+    final content = text.isEmpty ? ' ' : text;
+    final painter = TextPainter(
+      text: TextSpan(text: content, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: null,
+    )..layout(maxWidth: maxWidth);
+    final lines = painter.computeLineMetrics().length;
+    return lines.clamp(1, _maxVisibleLines);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Bar: fixed height (22 top + 15 line + 22 bottom), fully undercovered by background.
+    final textStyle = TextStyle(
+      fontFamily: 'Aeroport',
+      fontSize: _fontSize,
+      fontWeight: FontWeight.w500,
+      height: _lineHeight,
+      color: AppTheme.textColor,
+    );
+
     return Material(
       color: Colors.transparent,
-      child: Container(
-        width: double.infinity,
-        height: GlobalBottomBar.barHeight,
-        color: AppTheme.backgroundColor,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Padding(
-              padding: const EdgeInsets.only(left: 15, right: 15),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: GlobalBottomBar.barHeight,
-                      child: Center(
-                        child: _controller.text.isEmpty
-                            ? TextField(
-                                key: _textFieldKey,
-                                controller: _controller,
-                                focusNode: _focusNode,
-                                enabled: true,
-                                readOnly: false,
-                                showCursor: true,
-                                enableInteractiveSelection: true,
-                                cursorColor: AppTheme.textColor,
-                                cursorHeight: 15,
-                                maxLines: 11,
-                                minLines: 1,
-                                textInputAction: TextInputAction.send,
-                                textAlignVertical: TextAlignVertical.center,
-                                style: TextStyle(
-                                  fontFamily: 'Aeroport',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.0,
-                                  color: AppTheme.textColor,
-                                ),
-                                onSubmitted: (value) {
-                                  _navigateToNewPage();
-                                },
-                                onChanged: (value) {},
-                                decoration: InputDecoration(
-                                  hintText: (_isFocused ||
-                                          _controller.text.isNotEmpty)
-                                      ? null
-                                      : 'AI & Search',
-                                  hintStyle: TextStyle(
-                                    color: AppTheme.textColor,
-                                    fontFamily: 'Aeroport',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.0,
+      child: LayoutBuilder(
+        builder: (context, outerConstraints) {
+          final constrainedWidth = outerConstraints.maxWidth > 600
+              ? 600.0
+              : outerConstraints.maxWidth;
+          final inputWidth = (constrainedWidth - 15 - 15 - 5 - 15).clamp(80.0, 560.0);
+          final visualLines = _computeVisualLineCount(
+            text: _controller.text,
+            style: textStyle,
+            maxWidth: inputWidth,
+          );
+          final computedHeight =
+              (_verticalPadding * 2) + (visualLines * _fontSize * _lineHeight);
+          _currentBarHeight = computedHeight;
+
+          final showInputScrollbar = _inputScrollController.hasClients &&
+              _inputScrollController.position.maxScrollExtent > 0;
+
+          return Container(
+            width: double.infinity,
+            height: computedHeight,
+            color: AppTheme.backgroundColor,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 15, right: 15),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: computedHeight,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: TextField(
+                                  controller: _controller,
+                                  focusNode: _focusNode,
+                                  enabled: true,
+                                  readOnly: false,
+                                  showCursor: true,
+                                  enableInteractiveSelection: true,
+                                  cursorColor: AppTheme.textColor,
+                                  cursorHeight: _fontSize,
+                                  maxLines: _maxVisibleLines,
+                                  minLines: 1,
+                                  textInputAction: TextInputAction.send,
+                                  scrollController: _inputScrollController,
+                                  style: textStyle,
+                                  onSubmitted: (_) => _navigateToNewPage(),
+                                  decoration: InputDecoration(
+                                    hintText: (_isFocused || _controller.text.isNotEmpty)
+                                        ? null
+                                        : 'AI & Search',
+                                    hintStyle: textStyle,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.only(
+                                      left: 0,
+                                      right: 6,
+                                      top: _verticalPadding,
+                                      bottom: _verticalPadding,
+                                    ),
                                   ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.only(
-                                    left: 0,
-                                    right: 0,
-                                    top: 22,
-                                    bottom: 22,
-                                  ),
-                                ),
-                              )
-                            : TextField(
-                                key: _textFieldKey,
-                                controller: _controller,
-                                focusNode: _focusNode,
-                                enabled: true,
-                                readOnly: false,
-                                showCursor: true,
-                                enableInteractiveSelection: true,
-                                cursorColor: AppTheme.textColor,
-                                cursorHeight: 15,
-                                maxLines: 1,
-                                minLines: 1,
-                                textInputAction: TextInputAction.send,
-                                textAlignVertical:
-                                    _controller.text.split('\n').length == 1
-                                        ? TextAlignVertical.center
-                                        : TextAlignVertical.bottom,
-                                style: TextStyle(
-                                  fontFamily: 'Aeroport',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.0,
-                                  color: AppTheme.textColor,
-                                ),
-                                onSubmitted: (value) {
-                                  _navigateToNewPage();
-                                },
-                                onChanged: (value) {},
-                                decoration: InputDecoration(
-                                  hintText: (_isFocused ||
-                                          _controller.text.isNotEmpty)
-                                      ? null
-                                      : 'AI & Search',
-                                  hintStyle: TextStyle(
-                                    color: AppTheme.textColor,
-                                    fontFamily: 'Aeroport',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.0,
-                                  ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding:
-                                      _controller.text.split('\n').length > 1
-                                          ? const EdgeInsets.only(
-                                              left: 0,
-                                              right: 0,
-                                              top: 22,
-                                              bottom: 22)
-                                          : const EdgeInsets.only(
-                                              left: 0,
-                                              right: 0,
-                                              top: 22,
-                                              bottom: 22,
-                                            ),
                                 ),
                               ),
+                              if (showInputScrollbar)
+                                Positioned(
+                                  right: 0,
+                                  top: _verticalPadding,
+                                  bottom: _verticalPadding,
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final containerHeight = constraints.maxHeight;
+                                      if (containerHeight <= 0) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      try {
+                                        final position = _inputScrollController.position;
+                                        final maxScroll = position.maxScrollExtent;
+                                        final currentScroll = position.pixels;
+                                        final viewportHeight = position.viewportDimension;
+                                        final totalHeight = viewportHeight + maxScroll;
+                                        if (maxScroll <= 0 || totalHeight <= 0) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final ratio =
+                                            (viewportHeight / totalHeight).clamp(0.0, 1.0);
+                                        final indicatorHeight =
+                                            (containerHeight * ratio).clamp(10.0, containerHeight);
+                                        final availableSpace =
+                                            (containerHeight - indicatorHeight).clamp(0.0, containerHeight);
+                                        final scrollPosition =
+                                            (currentScroll / maxScroll).clamp(0.0, 1.0);
+                                        final top = (scrollPosition * availableSpace)
+                                            .clamp(0.0, containerHeight);
+                                        return Padding(
+                                          padding: EdgeInsets.only(top: top),
+                                          child: Container(
+                                            width: 1,
+                                            height: indicatorHeight,
+                                            color: const Color(0xFF818181),
+                                          ),
+                                        );
+                                      } catch (_) {
+                                        return const SizedBox.shrink();
+                                      }
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 5),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 22),
+                        child: GestureDetector(
+                          onTap: () {
+                            AppHaptic.heavy();
+                            _navigateToNewPage();
+                          },
+                          child: SvgPicture.asset(
+                            AppTheme.isLightTheme
+                                ? 'assets/icons/apply_light.svg'
+                                : 'assets/icons/apply_dark.svg',
+                            width: 15,
+                            height: 10,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 5),
-                  GestureDetector(
-                    onTap: () {
-                      AppHaptic.heavy();
-                      _navigateToNewPage();
-                    },
-                    child: SvgPicture.asset(
-                      AppTheme.isLightTheme
-                          ? 'assets/icons/apply_light.svg'
-                          : 'assets/icons/apply_dark.svg',
-                      width: 15,
-                      height: 10,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "SilentlyContinue"
+$root = (Resolve-Path $PSScriptRoot).Path
 
 function Get-ListeningPids($port) {
   $lines = netstat -ano | findstr ":$port" | findstr "LISTENING"
@@ -88,6 +89,51 @@ function Kill-BackendPythonByCommand {
   Stop-Pids $backendPids "local uvicorn backend"
 }
 
+function Kill-RepoProcesses {
+  param(
+    [string]$RootPath
+  )
+
+  Write-Host "Checking repo-related process leftovers..."
+  $rootRegex = [regex]::Escape($RootPath)
+
+  # Target only runtime processes we spawn for local stack.
+  $runtimeNames = @("python.exe", "dart.exe", "flutter.bat")
+  $repoRuntimePids = Get-CimInstance Win32_Process |
+    Where-Object {
+      $name = $_.Name
+      $cmd = $_.CommandLine
+      if (-not $cmd) { return $false }
+      if (-not ($runtimeNames -contains $name)) { return $false }
+      return ($cmd -match $rootRegex)
+    } |
+    Select-Object -ExpandProperty ProcessId -Unique
+
+  Stop-Pids $repoRuntimePids "repo runtime process"
+}
+
+function Kill-LogTailWindows {
+  param(
+    [string]$RootPath
+  )
+
+  Write-Host "Checking log-tail viewer windows..."
+  $rootRegex = [regex]::Escape($RootPath)
+  $tailPids = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object {
+      $cmd = $_.CommandLine
+      if (-not $cmd) { return $false }
+      return (
+        ($cmd -match "Get-Content\s+-Path") -and
+        ($cmd -match "rag\.ps\.out\.log|ai\.ps\.out\.log|bot\.ps\.out\.log|front\.ps\.out\.log") -and
+        ($cmd -match $rootRegex)
+      )
+    } |
+    Select-Object -ExpandProperty ProcessId -Unique
+
+  Stop-Pids $tailPids "service log tail window"
+}
+
 # Always stop backend + rag
 Kill-Port 8000
 Kill-Port 8001
@@ -96,6 +142,8 @@ Kill-Port 3000
 Kill-BackendPythonByCommand
 Kill-BotProcess
 Kill-FrontendFlutterProcess
+Kill-RepoProcesses -RootPath $root
+Kill-LogTailWindows -RootPath $root
 
 if ($KeepOllama) {
   Write-Host "Keeping Ollama (11434) running. Use without -KeepOllama to stop it."

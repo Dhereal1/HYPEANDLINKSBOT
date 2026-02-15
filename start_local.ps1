@@ -11,11 +11,24 @@ $ErrorActionPreference = "Stop"
 Write-Host "start_local.ps1: launching local stack..."
 
 function Get-ListeningPids($port) {
-  $lines = netstat -ano | findstr ":$port" | findstr "LISTENING"
+  try {
+    $netConns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if ($netConns) {
+      return @($netConns | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { [int]$_ })
+    }
+  } catch {}
+
+  # Fallback for environments where Get-NetTCPConnection isn't available.
+  $netstatExe = Join-Path ([Environment]::GetFolderPath("Windows")) "System32\netstat.exe"
+  if (-not (Test-Path -LiteralPath $netstatExe)) {
+    return @()
+  }
+
+  $lines = (& $netstatExe -ano) | Select-String ":$port" | Select-String "LISTENING"
   if (-not $lines) { return @() }
   $pids = @()
   foreach ($line in $lines) {
-    $parts = ($line -split "\s+") | Where-Object { $_ -ne "" }
+    $parts = ($line.ToString() -split "\s+") | Where-Object { $_ -ne "" }
     if ($parts.Count -gt 0) {
       $procId = $parts[-1]
       if ($procId -match "^\d+$") { $pids += [int]$procId }

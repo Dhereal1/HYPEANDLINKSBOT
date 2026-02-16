@@ -437,6 +437,19 @@ function Install-ServiceDependencies {
     [string]$VenvPythonPath
   )
 
+  function Get-RequirementsArgumentPath {
+    param(
+      [string]$BasePath,
+      [string]$FullPath
+    )
+    $baseNorm = (Resolve-Path -LiteralPath $BasePath).Path.TrimEnd('\')
+    $fullNorm = (Resolve-Path -LiteralPath $FullPath).Path
+    if ($fullNorm.StartsWith($baseNorm, [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $fullNorm.Substring($baseNorm.Length).TrimStart('\')
+    }
+    return $fullNorm
+  }
+
   function Invoke-PipInstallWithRetry {
     param(
       [string]$RequirementsPath,
@@ -445,12 +458,17 @@ function Install-ServiceDependencies {
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
       Write-Host "  pip install (attempt $attempt/$MaxAttempts): $RequirementsPath"
-      & $VenvPythonPath -m pip install -r $RequirementsPath
-      if ($LASTEXITCODE -eq 0) {
+      $reqArg = Get-RequirementsArgumentPath -BasePath $RootPath -FullPath $RequirementsPath
+      $pipProc = Start-Process -FilePath $VenvPythonPath `
+        -WorkingDirectory $RootPath `
+        -ArgumentList "-m", "pip", "install", "-r", $reqArg `
+        -Wait `
+        -PassThru
+      if ($pipProc.ExitCode -eq 0) {
         return
       }
       if ($attempt -lt $MaxAttempts) {
-        Write-Host "  pip install failed, retrying in 3s..." -ForegroundColor Yellow
+        Write-Host "  pip install failed (exit=$($pipProc.ExitCode)), retrying in 3s..." -ForegroundColor Yellow
         Start-Sleep -Seconds 3
       }
     }

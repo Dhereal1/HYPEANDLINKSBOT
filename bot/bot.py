@@ -36,6 +36,39 @@ _http_runner: web.AppRunner | None = None
 LANG_SWITCH_DEBOUNCE_SECONDS = 0.5
 
 
+def _mask_secret(value: str, visible: int = 4) -> str:
+    if not value:
+        return "(missing)"
+    if len(value) <= visible * 2:
+        return "*" * len(value)
+    return f"{value[:visible]}...{value[-visible:]}"
+
+
+def _resolve_inner_calls_key_with_source() -> tuple[str, str]:
+    for name in ("INNER_CALLS_KEY", "SELF_API_KEY", "API_KEY", "AI_KEY"):
+        raw = (os.getenv(name) or "").strip()
+        if raw:
+            return raw, name
+    return "", "(none)"
+
+
+def _log_runtime_env_snapshot() -> None:
+    ai_backend_url = get_ai_backend_url()
+    key, key_source = _resolve_inner_calls_key_with_source()
+    app_url_raw = (os.getenv("APP_URL") or "").strip()
+    app_url_built = build_app_launch_url()
+    http_host = (os.getenv("HTTP_HOST") or "0.0.0.0").strip()
+    http_port = (os.getenv("PORT") or os.getenv("HTTP_PORT") or "8080").strip()
+    db_set = bool((os.getenv("DATABASE_URL") or "").strip())
+    print("[ENV][BOT] runtime configuration snapshot")
+    print(f"[ENV][BOT] AI_BACKEND_URL={ai_backend_url}")
+    print(f"[ENV][BOT] INNER_CALLS_KEY source={key_source} preview={_mask_secret(key)}")
+    print(f"[ENV][BOT] APP_URL raw={app_url_raw or '(missing)'}")
+    print(f"[ENV][BOT] APP_URL valid_launch_url={bool(app_url_built)}")
+    print(f"[ENV][BOT] HTTP bind host={http_host} port={http_port}")
+    print(f"[ENV][BOT] DATABASE_URL configured={db_set}")
+
+
 def log_timing(label: str, start_time: float) -> float:
     """Log elapsed time and return current time for next measurement."""
     elapsed = time.perf_counter() - start_time
@@ -289,7 +322,8 @@ async def ensure_user_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 def _resolve_bot_api_key() -> str:
-    return (os.getenv('SELF_API_KEY') or os.getenv('API_KEY') or "").strip()
+    key, _ = _resolve_inner_calls_key_with_source()
+    return key
 
 
 def _cors_headers() -> dict[str, str]:
@@ -333,21 +367,22 @@ def _prompt_unavailable_response() -> web.Response:
 
 def _authorize_request(request: web.Request) -> tuple[bool, web.Response | None]:
     api_key = _resolve_bot_api_key()
+    path = request.path
     if not api_key:
-        print("[BOT_HTTP_API] auth failed: SELF_API_KEY/API_KEY not configured")
+        print(f"[BOT_HTTP_API] auth failed: INNER_CALLS_KEY (or aliases) not configured (path={path})")
         return False, _json_response(
-            {"error": "SELF_API_KEY is not configured on this service."},
+            {"error": "INNER_CALLS_KEY is not configured on this service."},
             status=503
         )
     incoming = (request.headers.get("X-API-Key") or "").strip()
     if not incoming:
-        print("[BOT_HTTP_API] auth failed: missing X-API-Key header")
+        print(f"[BOT_HTTP_API] auth failed: missing X-API-Key header (path={path})")
         return False, _json_response(
             {"error": "X-API-Key header is required."},
             status=401
         )
     if incoming != api_key:
-        print("[BOT_HTTP_API] auth failed: invalid X-API-Key")
+        print(f"[BOT_HTTP_API] auth failed: invalid X-API-Key (path={path})")
         return False, _json_response(
             {"error": "Invalid API key."},
             status=403
@@ -485,14 +520,14 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
     messages: List of message dicts with 'role' and 'content' (AI backend ChatMessage format)
     """
     stream_start = time.perf_counter()
-    api_key = os.getenv('SELF_API_KEY') or os.getenv('API_KEY')
+    api_key, key_source = _resolve_inner_calls_key_with_source()
     ai_backend_url = get_ai_backend_url()
     if not api_key:
-        raise ValueError("SELF_API_KEY environment variable must be set")
+        raise ValueError("Set one of INNER_CALLS_KEY, SELF_API_KEY, API_KEY, or AI_KEY")
     
     accumulated_text = ""
     last_edit_time = asyncio.get_event_loop().time()
-    edit_interval = float(os.getenv("EDIT_INTERVAL_SECONDS", "1.5"))
+    edit_interval = float(os.getenv("EDIT_INTERVAL_SECONDS", "1"))
     last_sent_text = ""  # Track last sent text to avoid "message not modified" errors
     current_message_id = message_id
     key = (chat_id, message_id)
@@ -562,6 +597,10 @@ async def stream_ai_response(messages: list, bot, chat_id: int, message_id: int,
                         except Exception:
                             response_text = ""
                 print(f"[AI_BACKEND_ERROR] status={status_code} body={response_text[:2000]}")
+                print(
+                    "[AI_BACKEND_ERROR] "
+                    f"ai_backend_url={ai_backend_url} key_source={key_source} key_preview={_mask_secret(api_key)}"
+                )
                 await edit_or_fallback_send(f"AI backend error (status {status_code}). Please try again.")
                 return
             
@@ -895,8 +934,8 @@ def main():
     if not bot_token:
         raise ValueError("Environment variable 'BOT_TOKEN' is not set")
     ai_backend_url = get_ai_backend_url()
-    api_key = os.getenv('SELF_API_KEY') or os.getenv('API_KEY') or ""
-    key_preview = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) >= 8 else "(missing/short)"
+    api_key, key_source = _resolve_inner_calls_key_with_source()
+    key_preview = _mask_secret(api_key)
     
     app = ApplicationBuilder().token(bot_token).post_init(post_init).post_shutdown(shutdown).build()
     app.add_error_handler(error_handler)
@@ -915,7 +954,8 @@ def main():
     
     print("Bot starting...")
     print(f"AI_BACKEND_URL={ai_backend_url}")
-    print(f"SELF_API_KEY preview={key_preview}")
+    print(f"BOT->AI key preview={key_preview} (from {key_source})")
+    _log_runtime_env_snapshot()
     try:
         app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
     except Conflict as e:

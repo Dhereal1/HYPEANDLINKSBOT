@@ -114,18 +114,6 @@ Switch:
 - Frontend availability
 - Ollama model presence (when Ollama provider is active)
 
-## Key Environment Variables (Local)
-
-- `BOT_TOKEN` - Telegram bot token
-- `SELF_API_KEY` / `API_KEY` - shared key between frontend/bot/AI API calls
-- `AI_BACKEND_URL` - defaults to `http://127.0.0.1:8000`
-- `RAG_URL` - defaults to `http://127.0.0.1:8001`
-- `HTTP_PORT` - bot API port (default `8080`)
-- `APP_URL` - URL used for Telegram "Run app" button (defaults to local frontend URL)
-- `LLM_PROVIDER` - `ollama` (default in local script) or `openai`
-- `OLLAMA_URL`, `OLLAMA_MODEL` - Ollama runtime/model settings
-- `OPENAI_API_KEY`, `OPENAI_MODEL` - OpenAI mode settings
-
 ## Frontend Deploy Flow
 
 Current frontend deploy helper scripts in `front/` are Vercel-oriented:

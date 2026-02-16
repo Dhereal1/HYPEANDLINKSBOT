@@ -42,14 +42,14 @@ This is the Flutter frontend for the XP7K Telegram Mini App.
    cd front
    cat > .env <<'EOF'
    BOT_API_URL=http://127.0.0.1:8000
-   BOT_API_KEY=change-me-shared-secret
+   INNER_CALLS_KEY=change-me-shared-secret
    EOF
    ```
    
    Or manually create `.env` with:
    ```
    BOT_API_URL=http://127.0.0.1:8000
-   BOT_API_KEY=change-me-shared-secret
+   INNER_CALLS_KEY=change-me-shared-secret
    ```
    
    > **Note**: The `.env` file is gitignored and won't be committed. For production, set the same env vars in Vercel project settings.

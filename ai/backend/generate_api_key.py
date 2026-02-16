@@ -18,10 +18,10 @@ def generate_api_key(length=32):
 if __name__ == "__main__":
     api_key = generate_api_key(32)
     print(f"Generated API Key: {api_key}")
-    print(f"\nSet this as your API_KEY environment variable:")
-    print(f"export API_KEY={api_key}")
+    print(f"\nSet this as your INNER_CALLS_KEY environment variable:")
+    print(f"export INNER_CALLS_KEY={api_key}")
     print(f"\nOr for Windows:")
-    print(f"set API_KEY={api_key}")
+    print(f"set INNER_CALLS_KEY={api_key}")
 
 
 

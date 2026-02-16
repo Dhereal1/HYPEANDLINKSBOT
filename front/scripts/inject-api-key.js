@@ -2,12 +2,16 @@ const fs = require('fs');
 const path = require('path');
 
 // Read the API key from environment variable
-const apiKey = process.env.API_KEY || '';
+const apiKey =
+  process.env.INNER_CALLS_KEY ||
+  process.env.BOT_API_KEY ||
+  process.env.API_KEY ||
+  '';
 
 if (!apiKey) {
-  console.warn('Warning: API_KEY environment variable is not set.');
+  console.warn('Warning: INNER_CALLS_KEY/BOT_API_KEY/API_KEY is not set.');
   console.warn('The app will work but API calls may fail.');
-  console.warn('To set it locally, run: export API_KEY=your_key_here (Linux/Mac) or set API_KEY=your_key_here (Windows)');
+  console.warn('To set it locally, run: export INNER_CALLS_KEY=your_key_here (Linux/Mac) or set INNER_CALLS_KEY=your_key_here (Windows)');
 }
 
 // Path to the built index.html

@@ -38,6 +38,33 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8001")
 RESPONSE_FORMAT_VERSION = "facts_analysis_v2"
+INNER_CALLS_KEY = (os.getenv("INNER_CALLS_KEY") or os.getenv("API_KEY") or "").strip()
+
+
+def _mask_secret(value: str, visible: int = 4) -> str:
+    if not value:
+        return "(missing)"
+    if len(value) <= visible * 2:
+        return "*" * len(value)
+    return f"{value[:visible]}...{value[-visible:]}"
+
+
+def _log_runtime_env_snapshot() -> None:
+    provider = "openai" if LLM_PROVIDER == "openai" else "ollama"
+    logger.info("[ENV][AI] runtime configuration snapshot")
+    logger.info("[ENV][AI] provider=%s", provider)
+    logger.info("[ENV][AI] INNER_CALLS_KEY configured=%s preview=%s", bool(INNER_CALLS_KEY), _mask_secret(INNER_CALLS_KEY))
+    logger.info("[ENV][AI] RAG_URL=%s", RAG_URL or "(missing)")
+    logger.info("[ENV][AI] OLLAMA_URL=%s", OLLAMA_URL or "(missing)")
+    logger.info("[ENV][AI] OLLAMA_MODEL=%s", OLLAMA_MODEL or "(missing)")
+    logger.info("[ENV][AI] OPENAI_MODEL=%s", OPENAI_MODEL or "(missing)")
+    logger.info("[ENV][AI] OPENAI_API_KEY configured=%s", bool(OPENAI_API_KEY))
+
+
+def _inner_calls_headers() -> Dict[str, str]:
+    if not INNER_CALLS_KEY:
+        return {}
+    return {"X-API-Key": INNER_CALLS_KEY}
 
 # ============================================================================
 # TICKER DETECTION - PRODUCTION GRADE
@@ -244,7 +271,10 @@ async def detect_ticker_via_rag(
             r = None
             for attempt in range(max_retries + 1):
                 try:
-                    r = await client.get(f"{rag_url.rstrip('/')}/tokens/{symbol}")
+                    r = await client.get(
+                        f"{rag_url.rstrip('/')}/tokens/{symbol}",
+                        headers=_inner_calls_headers(),
+                    )
                     last_transport_error = None
                     break
                 except (httpx.TimeoutException, httpx.RequestError) as e:
@@ -699,7 +729,7 @@ def _has_explicit_ticker_signal(text: str) -> bool:
 # API KEY VERIFICATION
 # ============================================================================
 
-API_KEY = os.getenv("API_KEY")
+API_KEY = INNER_CALLS_KEY
 
 
 def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
@@ -767,6 +797,11 @@ class ChatRequest(BaseModel):
 # API ENDPOINTS
 # ============================================================================
 
+
+@app.on_event("startup")
+async def _on_startup_log_env() -> None:
+    _log_runtime_env_snapshot()
+
 @app.get("/")
 async def root():
     return {
@@ -793,7 +828,10 @@ async def _check_rag_health(timeout_s: float = 2.0) -> Dict[str, Any]:
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=timeout_s) as client:
-            r = await client.get(f"{RAG_URL.rstrip('/')}/health")
+            r = await client.get(
+                f"{RAG_URL.rstrip('/')}/health",
+                headers=_inner_calls_headers(),
+            )
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         if r.status_code == 200:
             return {
@@ -1057,7 +1095,10 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
             async with httpx.AsyncClient(timeout=5.0) as client:
                 rag_start = time.perf_counter()
                 encoded_query = urllib.parse.quote(user_last)
-                r = await client.get(f"{RAG_URL.rstrip('/')}/query?q={encoded_query}")
+                r = await client.get(
+                    f"{RAG_URL.rstrip('/')}/query?q={encoded_query}",
+                    headers=_inner_calls_headers(),
+                )
                 if r.status_code == 200:
                     try:
                         data = r.json()
@@ -1331,6 +1372,15 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                         error_detail = str(response.status_code)
 
                     if ticker_facts_text:
+                        logger.error(
+                            "Ticker fallback due to Ollama non-200. status=%s detail=%s provider=%s model=%s rag_url=%s inner_key=%s",
+                            response.status_code,
+                            error_detail,
+                            provider,
+                            model,
+                            RAG_URL,
+                            _mask_secret(INNER_CALLS_KEY),
+                        )
                         fallback = _combine_ticker_output(
                             "Анализ недоступен в данный момент."
                             if user_lang == "ru"
@@ -1415,6 +1465,15 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                         except Exception:
                             pass
                         if ticker_facts_text:
+                            logger.error(
+                                "Ticker fallback due to OpenAI stream non-200. status=%s detail=%s provider=%s model=%s rag_url=%s inner_key=%s",
+                                response.status_code,
+                                error_detail,
+                                provider,
+                                model,
+                                RAG_URL,
+                                _mask_secret(INNER_CALLS_KEY),
+                            )
                             fallback = _combine_ticker_output(
                                 "Анализ недоступен в данный момент."
                                 if user_lang == "ru"
@@ -1473,6 +1532,15 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                 except Exception:
                     pass
                 if ticker_facts_text:
+                    logger.error(
+                        "Ticker fallback due to OpenAI non-stream non-200. status=%s detail=%s provider=%s model=%s rag_url=%s inner_key=%s",
+                        response.status_code,
+                        error_detail,
+                        provider,
+                        model,
+                        RAG_URL,
+                        _mask_secret(INNER_CALLS_KEY),
+                    )
                     fallback = _combine_ticker_output(
                         "Анализ недоступен в данный момент."
                         if user_lang == "ru"

@@ -46,7 +46,8 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 }
 
 # REQUIRED env vars
-$env:API_KEY        = "my-local-dev-secret"
+$env:INNER_CALLS_KEY = "my-local-dev-secret"
+$env:API_KEY         = $env:INNER_CALLS_KEY
 $env:RAG_URL        = "http://127.0.0.1:8001"
 $env:AI_BACKEND_URL = "http://127.0.0.1:8000"
 $env:OLLAMA_URL     = "http://127.0.0.1:11434"

@@ -1,4 +1,8 @@
-TICKER LINK
+db
+
+edit interval healthcheck
+
+Ticker link
 
 Text input in bottom bar
 

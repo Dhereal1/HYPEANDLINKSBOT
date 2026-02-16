@@ -153,6 +153,7 @@ function To-SingleQuotedLiteral {
 
 function Start-ServiceLogWindow {
   param(
+    [string]$ServiceName,
     [string]$Title,
     [string]$OutLogPath,
     [string]$ErrLogPath
@@ -163,6 +164,7 @@ function Start-ServiceLogWindow {
   $errLiteral = To-SingleQuotedLiteral -Text $ErrLogPath
   $cmd = @"
 `$Host.UI.RawUI.WindowTitle = $titleLiteral
+Write-Host "[$ServiceName]" -ForegroundColor Cyan
 Write-Host "Streaming logs for $Title (Ctrl+C to stop this viewer)" -ForegroundColor Cyan
 Write-Host "OUT: $OutLogPath"
 Write-Host "ERR: $ErrLogPath"
@@ -174,6 +176,36 @@ Get-Content -Path $outLiteral, $errLiteral -Tail 30 -Wait
   Start-Process -FilePath "powershell.exe" `
     -ArgumentList @("-NoExit", "-Command", $cmd) `
     -WindowStyle Normal | Out-Null
+}
+
+function Start-ServiceProcessWindow {
+  param(
+    [string]$ServiceName,
+    [string]$WorkingDirectory,
+    [string]$ExecutablePath,
+    [string[]]$Arguments
+  )
+
+  $serviceLiteral = To-SingleQuotedLiteral -Text $ServiceName
+  $wdLiteral = To-SingleQuotedLiteral -Text $WorkingDirectory
+  $exeLiteral = To-SingleQuotedLiteral -Text $ExecutablePath
+  $argItems = @()
+  foreach ($arg in $Arguments) {
+    $argItems += (To-SingleQuotedLiteral -Text $arg)
+  }
+  $argsLiteral = "@(" + ($argItems -join ", ") + ")"
+  $cmd = @"
+`$Host.UI.RawUI.WindowTitle = $serviceLiteral
+Write-Host "[$ServiceName]" -ForegroundColor Cyan
+Set-Location -LiteralPath $wdLiteral
+`$args = $argsLiteral
+& $exeLiteral @args
+"@
+
+  return Start-Process -FilePath "powershell.exe" `
+    -ArgumentList @("-NoExit", "-Command", $cmd) `
+    -WindowStyle Normal `
+    -PassThru
 }
 
 $root = (Resolve-Path $PSScriptRoot).Path
@@ -447,17 +479,28 @@ function Install-ServiceDependencies {
 Ensure-VenvPython -RootPath $root -VenvPythonPath $venvPython
 Install-ServiceDependencies -RootPath $root -VenvPythonPath $venvPython
 
-# REQUIRED env vars
-$env:SELF_API_KEY   = "local-dev-self-api-key"
-$env:API_KEY        = $env:SELF_API_KEY
-$env:RAG_URL        = "http://127.0.0.1:8001"
-$env:AI_BACKEND_URL = "http://127.0.0.1:8000"
-$env:OLLAMA_URL     = "http://127.0.0.1:11434"
-$env:OLLAMA_MODEL   = "qwen2.5:1.5b"
-$env:HTTP_PORT      = "8080"
-$frontendPort       = 3000
-$env:BOT_TOKEN      = "8592693295:AAGRdNme_SmkOKbdNSH6uWq-QT4Hf2pRjvY"
-$env:APP_URL        = "http://127.0.0.1:$frontendPort"
+# ===== Environment configuration =====
+# Shared internal auth across front/bot/ai/rag
+$env:INNER_CALLS_KEY = "local-dev-inner-calls-key"
+
+# RAG
+$env:RAG_URL         = "http://127.0.0.1:8001"
+$env:COFFEE_URL      = "https://tokens.swap.coffee"
+# Optional swap.coffee key (blank by default for local run).
+$env:COFFEE_KEY      = ""
+
+# AI
+$env:AI_BACKEND_URL  = "http://127.0.0.1:8000"
+$env:OLLAMA_URL      = "http://127.0.0.1:11434"
+$env:OLLAMA_MODEL    = "qwen2.5:1.5b"
+
+# Bot
+$env:HTTP_PORT       = "8080"
+$env:BOT_TOKEN       = "8592693295:AAGRdNme_SmkOKbdNSH6uWq-QT4Hf2pRjvY"
+
+# Frontend
+$frontendPort        = 3000
+$env:APP_URL         = "http://127.0.0.1:$frontendPort"
 
 # LLM provider auto-selection:
 # - Prefer OpenAI when OPENAI_API_KEY is present
@@ -503,12 +546,14 @@ Start-Sleep -Milliseconds 300
 $frontEnvPath = Join-Path $frontDir ".env"
 $frontEnvBody = @(
   "BOT_API_URL=http://127.0.0.1:$($env:HTTP_PORT)"
-  "BOT_API_KEY=$($env:SELF_API_KEY)"
+  "INNER_CALLS_KEY=$($env:INNER_CALLS_KEY)"
+  "BOT_API_KEY=$($env:INNER_CALLS_KEY)"
 ) -join "`r`n"
 Set-Content -LiteralPath $frontEnvPath -Value ($frontEnvBody + "`r`n") -Encoding UTF8
 Write-Host "Synced frontend env: $frontEnvPath"
 Write-Host "  BOT_API_URL=http://127.0.0.1:$($env:HTTP_PORT)"
-Write-Host "  BOT_API_KEY=$($env:SELF_API_KEY)"
+Write-Host "  INNER_CALLS_KEY=$($env:INNER_CALLS_KEY)"
+Write-Host "  BOT_API_KEY=$($env:INNER_CALLS_KEY)"
 
 $reloadArgs = @()
 if ($Reload) { $reloadArgs = @("--reload") }
@@ -528,15 +573,8 @@ $frontErrLog = (Join-Path $logDir "front.ps.err.log")
 
 if ($LogsInServiceWindows) {
   Write-Host "Service logs mode: using each service window output (no extra tail windows)." -ForegroundColor Cyan
-  $ragProc = Start-Process -FilePath $venvPython `
-    -WorkingDirectory $ragDir `
-    -ArgumentList $ragArgs `
-    -PassThru
-
-  $aiProc = Start-Process -FilePath $venvPython `
-    -WorkingDirectory $aiDir `
-    -ArgumentList $aiArgs `
-    -PassThru
+  $ragProc = Start-ServiceProcessWindow -ServiceName "RAG" -WorkingDirectory $ragDir -ExecutablePath $venvPython -Arguments $ragArgs
+  $aiProc = Start-ServiceProcessWindow -ServiceName "AI" -WorkingDirectory $aiDir -ExecutablePath $venvPython -Arguments $aiArgs
 } else {
   $ragProc = Start-Process -FilePath $venvPython `
     -WorkingDirectory $ragDir `
@@ -568,10 +606,7 @@ if ($ForegroundBot) {
 }
 
 if ($LogsInServiceWindows) {
-  $botProc = Start-Process -FilePath $venvPython `
-    -WorkingDirectory $botDir `
-    -ArgumentList "bot.py" `
-    -PassThru
+  $botProc = Start-ServiceProcessWindow -ServiceName "BOT" -WorkingDirectory $botDir -ExecutablePath $venvPython -Arguments @("bot.py")
 } else {
   $botProc = Start-Process -FilePath $venvPython `
     -WorkingDirectory $botDir `
@@ -595,13 +630,11 @@ $frontArgs = @(
   "--web-hostname", "127.0.0.1",
   "--web-port", "$frontendPort",
   "--dart-define", "BOT_API_URL=http://127.0.0.1:$($env:HTTP_PORT)",
-  "--dart-define", "BOT_API_KEY=$($env:SELF_API_KEY)"
+  "--dart-define", "INNER_CALLS_KEY=$($env:INNER_CALLS_KEY)",
+  "--dart-define", "BOT_API_KEY=$($env:INNER_CALLS_KEY)"
 )
 if ($LogsInServiceWindows) {
-  $frontProc = Start-Process -FilePath "flutter" `
-    -WorkingDirectory $frontDir `
-    -ArgumentList $frontArgs `
-    -PassThru
+  $frontProc = Start-ServiceProcessWindow -ServiceName "FRONT" -WorkingDirectory $frontDir -ExecutablePath "flutter" -Arguments $frontArgs
 } else {
   $frontProc = Start-Process -FilePath "flutter" `
     -WorkingDirectory $frontDir `
@@ -612,10 +645,10 @@ if ($LogsInServiceWindows) {
 }
 
 if ($OpenLogWindows -and -not $LogsInServiceWindows) {
-  Start-ServiceLogWindow -Title "RAG logs" -OutLogPath $ragOutLog -ErrLogPath $ragErrLog
-  Start-ServiceLogWindow -Title "AI logs" -OutLogPath $aiOutLog -ErrLogPath $aiErrLog
-  Start-ServiceLogWindow -Title "Bot logs" -OutLogPath $botOutLog -ErrLogPath $botErrLog
-  Start-ServiceLogWindow -Title "Front logs" -OutLogPath $frontOutLog -ErrLogPath $frontErrLog
+  Start-ServiceLogWindow -ServiceName "RAG" -Title "RAG logs" -OutLogPath $ragOutLog -ErrLogPath $ragErrLog
+  Start-ServiceLogWindow -ServiceName "AI" -Title "AI logs" -OutLogPath $aiOutLog -ErrLogPath $aiErrLog
+  Start-ServiceLogWindow -ServiceName "BOT" -Title "Bot logs" -OutLogPath $botOutLog -ErrLogPath $botErrLog
+  Start-ServiceLogWindow -ServiceName "FRONT" -Title "Front logs" -OutLogPath $frontOutLog -ErrLogPath $frontErrLog
 }
 
 $ragUp = Wait-ForHttpReady -Uri "http://127.0.0.1:8001/health" -TimeoutSeconds 25

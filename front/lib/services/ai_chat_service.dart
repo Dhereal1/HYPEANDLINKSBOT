@@ -15,25 +15,33 @@ class AiChatService {
 
     final defineBotApiUrl = const String.fromEnvironment('BOT_API_URL').trim();
     final defineBotApiKey = const String.fromEnvironment('BOT_API_KEY').trim();
+    final defineInnerCallsKey =
+        const String.fromEnvironment('INNER_CALLS_KEY').trim();
 
     // Preferred names for current setup:
     // - BOT_API_URL
+    // - INNER_CALLS_KEY
     // - BOT_API_KEY
     // Backward compatibility for previous deployments:
     // - AI_BACKEND_URL
     // - API_KEY
     final envBotApiUrl = _readEnv('BOT_API_URL');
     final envAiBackendUrl = _readEnv('AI_BACKEND_URL');
+    final envInnerCallsKey = _readEnv('INNER_CALLS_KEY');
     final envBotApiKey = _readEnv('BOT_API_KEY');
     final envApiKey = _readEnv('API_KEY');
 
-    final botApiUrl = envBotApiUrl
-        .ifEmpty(envAiBackendUrl)
-        .ifEmpty(defineBotApiUrl)
-        .ifEmpty(localDefaultUrl)
-        .trim();
-    final botApiKey = envBotApiKey
+    final botApiUrl = _normalizeHttpUrl(
+      envBotApiUrl
+          .ifEmpty(envAiBackendUrl)
+          .ifEmpty(defineBotApiUrl)
+          .ifEmpty(localDefaultUrl)
+          .trim(),
+    );
+    final botApiKey = envInnerCallsKey
+        .ifEmpty(envBotApiKey)
         .ifEmpty(envApiKey)
+        .ifEmpty(defineInnerCallsKey)
         .ifEmpty(defineBotApiKey)
         .ifEmpty(localDefaultKey)
         .trim();
@@ -155,9 +163,18 @@ class AiChatService {
   Uri _resolveProxyEndpoint() {
     final explicit = _readEnv('AI_PROXY_URL');
     if (explicit.isNotEmpty) {
-      return Uri.parse(explicit);
+      return Uri.parse(_normalizeHttpUrl(explicit));
     }
     return Uri.base.resolve('/api/ai');
+  }
+
+  String _normalizeHttpUrl(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return value;
+    final hasScheme =
+        value.startsWith('http://') || value.startsWith('https://');
+    if (hasScheme) return value;
+    return 'https://$value';
   }
 
   String _readEnv(String key) {
@@ -180,7 +197,7 @@ class AiChatService {
   String _localDefaultBotApiKey() {
     final host = Uri.base.host.toLowerCase();
     if (host == '127.0.0.1' || host == 'localhost') {
-      return 'local-dev-self-api-key';
+      return 'local-dev-inner-calls-key';
     }
     return '';
   }

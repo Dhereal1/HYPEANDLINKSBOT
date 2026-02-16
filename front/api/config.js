@@ -17,7 +17,11 @@ module.exports = async (req, res) => {
   }
 
   // Return the API key from environment variables
-  const apiKey = process.env.API_KEY || '';
+  const apiKey =
+    process.env.INNER_CALLS_KEY ||
+    process.env.BOT_API_KEY ||
+    process.env.API_KEY ||
+    '';
 
   return res.status(200).json({
     apiKey: apiKey

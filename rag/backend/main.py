@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Header, HTTPException
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -16,8 +16,13 @@ ALLOWLIST_PATH = BASE_DIR.parent / "data" / "projects_allowlist.json"
 
 STORE_PATH = os.getenv("RAG_STORE_PATH", "rag_store.json")
 PROJECTS_STORE_PATH = os.getenv("PROJECTS_STORE_PATH", "projects_store.json")
-TOKENS_API_URL = os.getenv("TOKENS_API_URL", "https://tokens.swap.coffee")
-TOKENS_API_KEY = os.getenv("TOKENS_API_KEY")
+SWAP_COFFEE_BASE_URL = (
+    os.getenv("COFFEE_URL")
+    or os.getenv("TOKENS_API_URL")
+    or "https://tokens.swap.coffee"
+).strip().rstrip("/")
+COFFEE_KEY = (os.getenv("COFFEE_KEY") or os.getenv("TOKENS_API_KEY") or "").strip()
+INNER_CALLS_KEY = (os.getenv("INNER_CALLS_KEY") or os.getenv("API_KEY") or "").strip()
 TOKENS_VERIFICATION = os.getenv("TOKENS_VERIFICATION", "WHITELISTED,COMMUNITY,UNKNOWN")
 
 
@@ -26,6 +31,17 @@ def _first_non_none(*values):
         if v is not None:
             return v
     return None
+
+
+def verify_inner_calls_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    # Keep /health open; enforce key on data endpoints.
+    if not INNER_CALLS_KEY:
+        raise HTTPException(status_code=503, detail="INNER_CALLS_KEY is not configured.")
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="X-API-Key header is required.")
+    if x_api_key != INNER_CALLS_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return x_api_key
 
 def load_store() -> List[Dict[str, Any]]:
     if not os.path.exists(STORE_PATH):
@@ -58,12 +74,12 @@ def _normalize_symbol(symbol: str) -> str:
 
 def fetch_token_by_symbol(symbol: str) -> Dict[str, Any]:
     qs = urllib.parse.urlencode({"search": symbol, "size": 10, "verification": TOKENS_VERIFICATION})
-    url = f"{TOKENS_API_URL}/api/v3/jettons?{qs}"
+    url = f"{SWAP_COFFEE_BASE_URL}/api/v3/jettons?{qs}"
     started = time.monotonic()
     try:
         req = urllib.request.Request(url)
-        if TOKENS_API_KEY:
-            req.add_header("X-Api-Key", TOKENS_API_KEY)
+        if COFFEE_KEY:
+            req.add_header("X-Api-Key", COFFEE_KEY)
         with urllib.request.urlopen(req, timeout=10) as resp:
             status = getattr(resp, "status", 200)
             body = resp.read().decode("utf-8", errors="ignore")
@@ -139,12 +155,12 @@ def _normalize_symbol(symbol: str) -> str:
 
 def fetch_token_by_symbol(symbol: str) -> Dict[str, Any]:
     qs = urllib.parse.urlencode({"search": symbol, "size": 10, "verification": TOKENS_VERIFICATION})
-    url = f"{TOKENS_API_URL}/api/v3/jettons?{qs}"
+    url = f"{SWAP_COFFEE_BASE_URL}/api/v3/jettons?{qs}"
     started = time.monotonic()
     try:
         req = urllib.request.Request(url)
-        if TOKENS_API_KEY:
-            req.add_header("X-Api-Key", TOKENS_API_KEY)
+        if COFFEE_KEY:
+            req.add_header("X-Api-Key", COFFEE_KEY)
         with urllib.request.urlopen(req, timeout=10) as resp:
             status = getattr(resp, "status", 200)
             body = resp.read().decode("utf-8", errors="ignore")
@@ -229,12 +245,12 @@ def fetch_token_by_symbol(symbol: str) -> Dict[str, Any]:
         "verification": _verification_values(),
     }
     qs = urllib.parse.urlencode(params, doseq=True)
-    url = f"{TOKENS_API_URL}/api/v3/jettons?{qs}"
+    url = f"{SWAP_COFFEE_BASE_URL}/api/v3/jettons?{qs}"
     started = time.monotonic()
     try:
         req = urllib.request.Request(url)
-        if TOKENS_API_KEY:
-            req.add_header("X-Api-Key", TOKENS_API_KEY)
+        if COFFEE_KEY:
+            req.add_header("X-Api-Key", COFFEE_KEY)
         with urllib.request.urlopen(req, timeout=10) as resp:
             status = getattr(resp, "status", 200)
             body = resp.read().decode("utf-8", errors="ignore")
@@ -328,26 +344,26 @@ async def health():
     return {"status": "ok"}
 
 @app.get("/projects")
-async def list_projects():
+async def list_projects(api_key: str = Depends(verify_inner_calls_key)):
     return load_projects()
 
 @app.get("/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str, api_key: str = Depends(verify_inner_calls_key)):
     for p in load_projects():
         if p["id"] == project_id:
             return p
     return {"error": "not found"}
 
 @app.get("/tokens/{symbol}")
-async def get_token(symbol: str):
+async def get_token(symbol: str, api_key: str = Depends(verify_inner_calls_key)):
     now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     normalized = _normalize_symbol(symbol)
     source_params = {
         "search": normalized,
         "verification": _verification_values(),
     }
-    source_url = f"{TOKENS_API_URL}/api/v3/jettons?{urllib.parse.urlencode(source_params, doseq=True)}"
-    source_url = f"{TOKENS_API_URL}/api/v3/jettons?search={urllib.parse.quote(normalized)}"
+    source_url = f"{SWAP_COFFEE_BASE_URL}/api/v3/jettons?{urllib.parse.urlencode(source_params, doseq=True)}"
+    source_url = f"{SWAP_COFFEE_BASE_URL}/api/v3/jettons?search={urllib.parse.quote(normalized)}"
 
     if not normalized or not (2 <= len(normalized) <= 10):
         return {
@@ -463,7 +479,7 @@ async def get_token(symbol: str):
     return token
 
 @app.post("/ingest")
-async def ingest(req: IngestRequest):
+async def ingest(req: IngestRequest, api_key: str = Depends(verify_inner_calls_key)):
     store = load_store()
     for d in req.documents:
         store.append({"text": d.text, "source": d.source or "unknown"})
@@ -471,7 +487,7 @@ async def ingest(req: IngestRequest):
     return {"ingested": len(req.documents), "total": len(store)}
 
 @app.post("/query")
-async def query(req: QueryRequest):
+async def query(req: QueryRequest, api_key: str = Depends(verify_inner_calls_key)):
     store = load_store()
     q = req.query.lower().strip()
     q_words = set([w for w in q.split() if len(w) > 2])
@@ -537,7 +553,7 @@ async def query(req: QueryRequest):
     return {"context": context, "sources": sources}
 
 @app.post("/ingest/projects")
-async def ingest_projects(projects: List[Project]):
+async def ingest_projects(projects: List[Project], api_key: str = Depends(verify_inner_calls_key)):
     store = load_projects()
     by_id = {p["id"]: p for p in store}
 
@@ -549,7 +565,7 @@ async def ingest_projects(projects: List[Project]):
     return {"ingested": len(projects), "total": len(merged)}
 
 @app.post("/ingest/source/allowlist")
-async def ingest_allowlist():
+async def ingest_allowlist(api_key: str = Depends(verify_inner_calls_key)):
     try:
         if not ALLOWLIST_PATH.exists():
             return {

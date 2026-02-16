@@ -44,8 +44,8 @@ if [ "$LLM_PROVIDER_NORMALIZED" = "ollama" ]; then
             cat /tmp/ollama.log || true
         fi
 
-        # Ensure model exists before API starts. Do not crash container on pull failures.
-        MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+        # Ensure model exists before API starts. Keep default in sync with ai/backend/main.py.
+        MODEL=${OLLAMA_MODEL:-qwen2.5:1.5b}
         echo "Checking for model: $MODEL"
         if ! $OLLAMA_BIN list 2>/dev/null | awk 'NR>1 {print $1}' | grep -Fxq "$MODEL"; then
             echo "Model $MODEL not found. Pulling before startup (first boot may take several minutes)..."

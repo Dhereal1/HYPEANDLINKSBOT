@@ -23,7 +23,13 @@ def get_ai_backend_url() -> str:
 
 
 def get_api_key() -> str:
-    return (os.getenv("SELF_API_KEY") or os.getenv("API_KEY") or "").strip()
+    return (
+        os.getenv("INNER_CALLS_KEY")
+        or os.getenv("SELF_API_KEY")
+        or os.getenv("API_KEY")
+        or os.getenv("AI_KEY")
+        or ""
+    ).strip()
 
 
 def get_http_bind() -> tuple[str, int]:

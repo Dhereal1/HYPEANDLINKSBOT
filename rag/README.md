@@ -20,6 +20,10 @@ POST /query
 POST /ingest/projects
 POST /ingest/source/allowlist
 
+Auth:
+- `GET /health` is open
+- All other endpoints require header `X-API-Key: {INNER_CALLS_KEY}`
+
 ## Project Knowledge (V1)
 
 This service supports a free-first RAG approach:

@@ -21,7 +21,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 Required:
 
-- `API_KEY` - shared secret expected in `X-API-Key`.
+- `INNER_CALLS_KEY` - shared secret expected in `X-API-Key`.
 
 Optional core wiring:
 
@@ -38,7 +38,7 @@ LLM provider routing:
 Copy/paste example:
 
 ```env
-API_KEY=change-me-shared-secret
+INNER_CALLS_KEY=change-me-shared-secret
 RAG_URL=http://127.0.0.1:8001
 
 LLM_PROVIDER=ollama
@@ -60,4 +60,4 @@ Start command:
 uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-Set `RAG_URL` to the deployed RAG URL and set `API_KEY` to the same value used by the bot.
+Set `RAG_URL` to the deployed RAG URL and set `INNER_CALLS_KEY` to the same value used by bot/frontend/rag.

@@ -14,13 +14,14 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 - Required envs:
 
 ```env
-TOKENS_API_URL=https://tokens.swap.coffee
+INNER_CALLS_KEY=change-me-shared-secret
 ```
 
 - Optional envs:
 
 ```env
-TOKENS_API_KEY=
+COFFEE_URL=https://tokens.swap.coffee
+COFFEE_KEY=
 RAG_STORE_PATH=rag_store.json
 PROJECTS_STORE_PATH=projects_store.json
 TOKENS_STORE_PATH=tokens_store.json
@@ -44,7 +45,7 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 - Required envs:
 
 ```env
-API_KEY=change-me-shared-secret
+INNER_CALLS_KEY=change-me-shared-secret
 RAG_URL=https://<rag-domain>
 LLM_PROVIDER=ollama
 OLLAMA_URL=http://127.0.0.1:11434

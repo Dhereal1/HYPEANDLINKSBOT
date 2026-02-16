@@ -49,6 +49,25 @@ function Stop-Pids([int[]]$pids, [string]$reason) {
   }
 }
 
+function Stop-PidsWithTree([int[]]$pids, [string]$reason) {
+  if (-not $pids -or $pids.Count -eq 0) {
+    Write-Host "  No process found for $reason."
+    return
+  }
+
+  $taskkillExe = Join-Path ([Environment]::GetFolderPath("Windows")) "System32\taskkill.exe"
+  foreach ($procId in ($pids | Sort-Object -Unique)) {
+    Write-Host "  Killing PID $procId with child tree ($reason)..."
+    try {
+      if (Test-Path -LiteralPath $taskkillExe) {
+        & $taskkillExe /PID $procId /T /F | Out-Null
+      } else {
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+}
+
 function Kill-Port($port) {
   Write-Host "Checking port $port..."
   Stop-Pids (Get-ListeningPids $port) "port $port"
@@ -162,6 +181,27 @@ function Kill-LogTailWindows {
   Stop-Pids $tailPids "service log tail window"
 }
 
+function Kill-ServiceWindows {
+  param(
+    [string]$RootPath
+  )
+
+  Write-Host "Checking service terminal windows..."
+  $rootRegex = [regex]::Escape($RootPath)
+  $serviceWindowPids = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object {
+      $cmd = $_.CommandLine
+      if (-not $cmd) { return $false }
+      return (
+        ($cmd -match "WindowTitle\s*=\s*'RAG'|WindowTitle\s*=\s*'AI'|WindowTitle\s*=\s*'BOT'|WindowTitle\s*=\s*'FRONT'") -or
+        (($cmd -match "Set-Location\s+-LiteralPath") -and ($cmd -match $rootRegex) -and ($cmd -match "uvicorn|bot\.py|flutter"))
+      )
+    } |
+    Select-Object -ExpandProperty ProcessId -Unique
+
+  Stop-PidsWithTree $serviceWindowPids "service window"
+}
+
 # Always stop backend + rag
 Kill-Port 8000
 Kill-Port 8001
@@ -171,6 +211,7 @@ Kill-BackendPythonByCommand
 Kill-BotProcess
 Kill-FrontendFlutterProcess
 Kill-RepoProcesses -RootPath $root
+Kill-ServiceWindows -RootPath $root
 Kill-LogTailWindows -RootPath $root
 
 if ($KeepOllama) {
@@ -178,6 +219,12 @@ if ($KeepOllama) {
 } else {
   Kill-OllamaProcesses
   Kill-Port 11434
+}
+
+# Final sweep: after terminal/process-tree kills, free target ports again.
+foreach ($port in 8000, 8001, 8080, 3000, 11434) {
+  if ($KeepOllama -and $port -eq 11434) { continue }
+  Kill-Port $port
 }
 
 Write-Host "Done. Active listeners summary:"

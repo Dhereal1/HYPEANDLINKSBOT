@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 import time
+import hashlib
 from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, CallbackQueryHandler, filters
@@ -44,6 +45,12 @@ def _mask_secret(value: str, visible: int = 4) -> str:
     return f"{value[:visible]}...{value[-visible:]}"
 
 
+def _key_fingerprint(value: str) -> str:
+    if not value:
+        return "(missing)"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:6]
+
+
 def _resolve_inner_calls_key_with_source() -> tuple[str, str]:
     for name in ("INNER_CALLS_KEY", "SELF_API_KEY", "API_KEY", "AI_KEY"):
         raw = (os.getenv(name) or "").strip()
@@ -63,6 +70,7 @@ def _log_runtime_env_snapshot() -> None:
     print("[ENV][BOT] runtime configuration snapshot")
     print(f"[ENV][BOT] AI_BACKEND_URL={ai_backend_url}")
     print(f"[ENV][BOT] INNER_CALLS_KEY source={key_source} preview={_mask_secret(key)}")
+    print(f"[ENV][BOT] INNER_CALLS_KEY sha256_prefix={_key_fingerprint(key)}")
     print(f"[ENV][BOT] APP_URL raw={app_url_raw or '(missing)'}")
     print(f"[ENV][BOT] APP_URL valid_launch_url={bool(app_url_built)}")
     print(f"[ENV][BOT] HTTP bind host={http_host} port={http_port}")

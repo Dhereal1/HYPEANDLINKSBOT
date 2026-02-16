@@ -224,11 +224,13 @@ function Start-ServiceProcessWindow {
   }
 
   $serviceLiteral = To-SingleQuotedLiteral -Text $ServiceName
+  $windowTitle = "HyperlinksSpaceBot - $ServiceName"
+  $windowTitleLiteral = To-SingleQuotedLiteral -Text $windowTitle
   $wdLiteral = To-SingleQuotedLiteral -Text $wdNative
   $exeLiteral = To-SingleQuotedLiteral -Text $exeNative
   $argList = ($Arguments | ForEach-Object { To-SingleQuotedLiteral -Text $_ }) -join " "
   $scriptLines = @(
-    "`$Host.UI.RawUI.WindowTitle = $serviceLiteral",
+    "`$Host.UI.RawUI.WindowTitle = $windowTitleLiteral",
     "Write-Host `"[$ServiceName]`" -ForegroundColor Cyan",
     "Set-Location -LiteralPath $wdLiteral",
     "& $exeLiteral $argList"
@@ -243,7 +245,7 @@ function Start-ServiceProcessWindow {
 
   # Launch via cmd /c start so the new window gets a real console and shows output
   # (avoids empty windows when parent was started from bash / non-console)
-  $startTitle = "HyperlinksSpaceBot $ServiceName"
+  $startTitle = $windowTitle
   $proc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList @(
       "/c", "start", "`"$startTitle`"",

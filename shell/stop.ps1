@@ -196,7 +196,22 @@ function Kill-ServiceWindows {
   )
 
   Write-Host "Checking service terminal windows (RAG/AI/BOT/FRONT)..."
-  # Service windows are: powershell.exe -File "...\HyperlinksSpaceBot_<SERVICE>.ps1" (started by start.ps1)
+  $taskkillExe = Join-Path ([Environment]::GetFolderPath("Windows")) "System32\taskkill.exe"
+
+  # 1) Kill by window title (matches start.ps1 "HyperlinksSpaceBot - RAG" etc.)
+  if (Test-Path -LiteralPath $taskkillExe) {
+    foreach ($svc in @("RAG", "AI", "BOT", "FRONT")) {
+      $title = "HyperlinksSpaceBot - $svc"
+      try {
+        & $taskkillExe /FI "WINDOWTITLE eq $title" /T /F 2>$null | Out-Null
+      } catch {}
+    }
+    try {
+      & $taskkillExe /FI "WINDOWTITLE lk *HyperlinksSpaceBot*" /T /F 2>$null | Out-Null
+    } catch {}
+  }
+
+  # 2) Kill by command line (powershell -File ...\HyperlinksSpaceBot_<SERVICE>.ps1)
   $serviceWindowPids = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
     Where-Object {
       $cmd = $_.CommandLine
@@ -206,6 +221,13 @@ function Kill-ServiceWindows {
     Select-Object -ExpandProperty ProcessId -Unique
 
   Stop-PidsWithTree $serviceWindowPids "service window"
+
+  # 3) Fallback: by MainWindowTitle (Get-Process sees the actual window title)
+  $myPid = $PID
+  $byTitle = Get-Process -Name powershell -ErrorAction SilentlyContinue |
+    Where-Object { $_.Id -ne $myPid -and $_.MainWindowTitle -match "HyperlinksSpaceBot - (RAG|AI|BOT|FRONT)" } |
+    Select-Object -ExpandProperty Id -Unique
+  Stop-PidsWithTree $byTitle "service window (by title)"
 }
 
 # First: close our service terminal windows and their full process trees (RAG/AI/BOT/FRONT)

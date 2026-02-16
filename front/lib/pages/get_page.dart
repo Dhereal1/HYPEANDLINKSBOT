@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
 import '../app/theme/app_theme.dart';
 import '../widgets/global/global_logo_bar.dart';
 import '../widgets/common/edge_swipe_back.dart';
@@ -15,6 +17,8 @@ class GetPage extends StatefulWidget {
 }
 
 class _GetPageState extends State<GetPage> {
+  StreamSubscription<tma.BackButton>? _backButtonSubscription;
+
   static const String _addressText =
       'EQCNT_JdH8Vc\n-kJyr_-HhBge\n7JpMMiR8X8yn\nsUJalr_qRiKE';
 
@@ -45,6 +49,31 @@ class _GetPageState extends State<GetPage> {
     if (mounted && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final webApp = tma.WebApp();
+        final eventHandler = webApp.eventHandler;
+        _backButtonSubscription =
+            eventHandler.backButtonClicked.listen((_) => _handleBackButton());
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) webApp.backButton.show();
+        });
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void dispose() {
+    _backButtonSubscription?.cancel();
+    try {
+      tma.WebApp().backButton.hide();
+    } catch (_) {}
+    super.dispose();
   }
 
   @override

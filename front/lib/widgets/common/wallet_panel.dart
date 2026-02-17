@@ -1,6 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../app/theme/app_theme.dart';
 
+const bool kUseMockWalletState = true;
+
+const Map<String, dynamic> kMockWalletState = {
+  'deploy_status': 'pending',
+  'dllr_status': 'allocated',
+  'address': 'EQC8fT2u...pRk91A',
+  'balances': {
+    'dllr': {
+      'allocated': '10.00',
+      'locked': '2.00',
+      'available': '8.00',
+    }
+  }
+};
+
 enum WalletPanelState {
   noWallet,
   generating,
@@ -21,6 +36,7 @@ class WalletPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveState = kUseMockWalletState ? kMockWalletState : mockState;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -31,22 +47,22 @@ class WalletPanel extends StatelessWidget {
           color: AppTheme.isLightTheme ? const Color(0xFFE0E0E0) : const Color(0xFF2A2A2A),
         ),
       ),
-      child: _buildContent(),
+      child: _buildContent(effectiveState),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(Map<String, dynamic> effectiveState) {
     switch (state) {
       case WalletPanelState.noWallet:
         return _buildNoWallet();
       case WalletPanelState.generating:
         return _buildGenerating();
       case WalletPanelState.deploying:
-        return _buildDeploying();
+        return _buildDeploying(effectiveState);
       case WalletPanelState.ready:
-        return _buildReadyOrRestored(isRestored: false);
+        return _buildReadyOrRestored(isRestored: false, effectiveState: effectiveState);
       case WalletPanelState.restored:
-        return _buildReadyOrRestored(isRestored: true);
+        return _buildReadyOrRestored(isRestored: true, effectiveState: effectiveState);
     }
   }
 
@@ -91,8 +107,8 @@ class WalletPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildDeploying() {
-    final address = (mockState['address'] as String?) ?? 'EQC...123';
+  Widget _buildDeploying(Map<String, dynamic> effectiveState) {
+    final address = (effectiveState['address'] as String?) ?? 'EQC...123';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -111,9 +127,13 @@ class WalletPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildReadyOrRestored({required bool isRestored}) {
-    final address = (mockState['address'] as String?) ?? 'EQC...123';
-    final dllr = (mockState['balances'] as Map<String, dynamic>?)?['dllr'] as Map<String, dynamic>?;
+  Widget _buildReadyOrRestored({
+    required bool isRestored,
+    required Map<String, dynamic> effectiveState,
+  }) {
+    final address = (effectiveState['address'] as String?) ?? 'EQC...123';
+    final dllr = (effectiveState['balances'] as Map<String, dynamic>?)?['dllr']
+        as Map<String, dynamic>?;
     final allocated = (dllr?['allocated'] as String?) ?? '0.00';
     final locked = (dllr?['locked'] as String?) ?? '0.00';
     final available = (dllr?['available'] as String?) ?? '0.00';

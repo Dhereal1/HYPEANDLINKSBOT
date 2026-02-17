@@ -195,8 +195,9 @@ class _WalletsPageState extends State<WalletsPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      // Placeholder only; backend/SMC integration will replace mock state.
-                      // TODO: fetch wallet status from /wallet/status and drive WalletPanel state.
+                      // Placeholder only; integration will replace mock state.
+                      // TODO: wire to WalletService (front-only local service or backend provider),
+                      // pending architecture decision.
                       const SizedBox(height: 20),
                       SizedBox(
                         height: 20,

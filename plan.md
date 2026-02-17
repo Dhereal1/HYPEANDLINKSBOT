@@ -1,5 +1,3 @@
-fix readme
-
 edit interval healthcheck
 
 Ticker link

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
 import '../widgets/global/global_logo_bar.dart';
 import '../widgets/common/edge_swipe_back.dart';
+import '../widgets/common/wallet_panel.dart';
 import '../telegram_safe_area.dart';
 import '../app/theme/app_theme.dart';
 import '../telegram_webapp.dart';
@@ -17,6 +18,36 @@ class WalletsPage extends StatefulWidget {
 }
 
 class _WalletsPageState extends State<WalletsPage> {
+  WalletPanelState _mockPanelState = WalletPanelState.deploying;
+
+  final Map<String, dynamic> _mockState = {
+    'deploy_status': 'pending',
+    'dllr_status': 'allocated',
+    'address': 'EQC8fT2u...pRk91A',
+    'balances': {
+      'dllr': {
+        'allocated': '10.00',
+        'locked': '2.00',
+        'available': '8.00',
+      }
+    }
+  };
+
+  String _stateLabel(WalletPanelState state) {
+    switch (state) {
+      case WalletPanelState.noWallet:
+        return 'No wallet';
+      case WalletPanelState.generating:
+        return 'Generating';
+      case WalletPanelState.deploying:
+        return 'Deploying';
+      case WalletPanelState.ready:
+        return 'Ready';
+      case WalletPanelState.restored:
+        return 'Restored';
+    }
+  }
+
   void _handleBackButton() {
     AppHaptic.heavy();
     if (mounted && Navigator.of(context).canPop()) {
@@ -122,6 +153,50 @@ class _WalletsPageState extends State<WalletsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                      WalletPanel(
+                        state: _mockPanelState,
+                        mockState: _mockState,
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: WalletPanelState.values.map((state) {
+                            final selected = _mockPanelState == state;
+                            final label = _stateLabel(state);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: GestureDetector(
+                                onTap: () => setState(() => _mockPanelState = state),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    color: selected
+                                        ? AppTheme.buttonBackgroundColor
+                                        : (AppTheme.isLightTheme
+                                            ? const Color(0xFFF1F1F1)
+                                            : const Color(0xFF222222)),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontFamily: 'Aeroport',
+                                      fontSize: 12,
+                                      color: selected
+                                          ? AppTheme.buttonTextColor
+                                          : const Color(0xFF818181),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Placeholder only; backend/SMC integration will replace mock state.
+                      // TODO: fetch wallet status from /wallet/status and drive WalletPanel state.
                       const SizedBox(height: 20),
                       SizedBox(
                         height: 20,

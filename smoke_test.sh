@@ -19,6 +19,8 @@ require_cmd() {
 require_cmd curl
 require_cmd jq
 
+GOLDEN_FILE="${GOLDEN_FILE:-ai/backend/tests/golden_prompts.json}"
+
 search_cmd() {
   if command -v rg >/dev/null 2>&1; then
     rg -n "$1" "$2"
@@ -90,6 +92,69 @@ run_prompt '$DOGS'
 run_prompt 'что такое DOGS?'
 run_prompt '$TON'
 assert_no_tx_words_when_tx24h_null "TON" '$TON'
+
+echo "== Golden checks =="
+run_golden_checks() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    echo "SKIP: golden file not found at $file"
+    return 0
+  fi
+
+  local total failures
+  total=$(jq '.cases | length' "$file")
+  failures=0
+  echo "Using golden file: $file (cases=$total)"
+
+  while IFS= read -r case_json; do
+    local name prompt response line
+    name=$(jq -r '.name' <<<"$case_json")
+    prompt=$(jq -r '.prompt' <<<"$case_json")
+
+    line=$(
+      curl -fsS -N -X POST "$AI_BACKEND_URL/api/chat" \
+        -H "Content-Type: application/json" \
+        -H "X-API-Key: $API_KEY" \
+        -d "$(jq -cn --arg p "$prompt" '{messages:[{role:"user",content:$p}],stream:false}')"
+    )
+    response=$(printf "%s\n" "$line" | tail -n 1 | jq -r '.response // ""')
+
+    local case_failed
+    case_failed=0
+
+    while IFS= read -r expected; do
+      [[ -z "$expected" ]] && continue
+      if ! printf "%s" "$response" | grep -Fqi -- "$expected"; then
+        echo "FAIL [$name] missing expected text: $expected"
+        case_failed=1
+      fi
+    done < <(jq -r '.expect_contains[]?' <<<"$case_json")
+
+    while IFS= read -r forbidden; do
+      [[ -z "$forbidden" ]] && continue
+      if printf "%s" "$response" | grep -Fqi -- "$forbidden"; then
+        echo "FAIL [$name] found forbidden text: $forbidden"
+        case_failed=1
+      fi
+    done < <(jq -r '.forbid_contains[]?' <<<"$case_json")
+
+    if [[ "$case_failed" -eq 1 ]]; then
+      failures=$((failures + 1))
+      echo "Response [$name]: $response"
+    else
+      echo "OK [$name]"
+    fi
+  done < <(jq -c '.cases[]' "$file")
+
+  if [[ "$failures" -gt 0 ]]; then
+    echo "Golden checks failed: $failures/$total"
+    exit 1
+  fi
+
+  echo "Golden checks passed: $total/$total"
+}
+
+run_golden_checks "$GOLDEN_FILE"
 
 echo "== Optional log checks =="
 if [[ -n "$AI_LOG_FILE" && -f "$AI_LOG_FILE" ]]; then

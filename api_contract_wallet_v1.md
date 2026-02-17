@@ -198,3 +198,31 @@ All non-2xx responses should return:
   - `deploy_status` is `deployed` or `failed`
 - If `failed`: show retry action that calls `POST /wallet/deploy` again (idempotent)
 
+---
+
+## Appendix: dllr_status Mapping (SMC State -> API State)
+
+Expected semantics (to be confirmed with contract implementation).
+
+| `dllr_status` | User meaning | Backend check (generic) | UI display |
+| --- | --- | --- | --- |
+| `none` | No DLLR allocation yet | No contract-reported allocation/credit for this wallet | "No DLLR yet" |
+| `allocated` | DLLR has been credited to treasury-side accounting for user | Treasury event/state indicates credit/allocation for user | "Allocated" badge; pending availability |
+| `locked` | DLLR exists but is not yet spendable by user | Contract-reported state indicates user amount is still locked in treasury flow | "Locked" badge; explain not spendable yet |
+| `available` | DLLR is released and spendable | Treasury/event state indicates release completed and available balance > 0 | "Available" badge + show available amount |
+
+Transition model (expected):
+
+`none -> allocated -> locked -> available`
+
+Failure handling:
+
+- Any deploy/provisioning failure should set `deploy_status=failed`
+- Backend should keep last known `dllr_status` and return error metadata in standard error body
+
+SMC reference (heading-level, non-code):
+
+- `smc/TOLK_SPEC.md` -> **Contract 1: Treasury**
+- `smc/TOLK_SPEC.md` -> **Contract 2: Treasury Jetton Wallet**
+- `smc/TOLK_SPEC.md` -> **Contract 3: Dollar Minter**
+- `smc/TOLK_SPEC.md` -> **Flow Summary (Mint -> Credit -> Release)**

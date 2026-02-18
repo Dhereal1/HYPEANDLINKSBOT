@@ -20,6 +20,8 @@ require_cmd curl
 require_cmd jq
 
 GOLDEN_FILE="${GOLDEN_FILE:-ai/backend/tests/golden_prompts.json}"
+LLM_PROVIDER="${LLM_PROVIDER:-unknown}"
+MODEL="${MODEL:-${OLLAMA_MODEL:-${OPENAI_MODEL:-unknown}}}"
 
 search_cmd() {
   if command -v rg >/dev/null 2>&1; then
@@ -93,7 +95,8 @@ run_prompt 'что такое DOGS?'
 run_prompt '$TON'
 assert_no_tx_words_when_tx24h_null "TON" '$TON'
 
-echo "== Golden checks =="
+echo "== Golden checks (provider: $LLM_PROVIDER, model: $MODEL) =="
+echo "Base URL: $AI_BACKEND_URL"
 run_golden_checks() {
   local file="$1"
   if [[ ! -f "$file" ]]; then

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
+import '../../app/app.dart';
 import '../../app/theme/app_theme.dart';
 import '../../utils/keyboard_height_service.dart';
 import '../../utils/app_haptic.dart';
@@ -34,24 +35,25 @@ class _AiSearchOverlayState extends State<AiSearchOverlay> {
     _isFocused = GlobalBottomBar.focusNotifier.value;
     GlobalBottomBar.focusNotifier.addListener(_updateBackButtonState);
     GlobalBottomBar.isAiPageOpenNotifier.addListener(_updateBackButtonState);
+    MyApp.routeStackChangedNotifier.addListener(_updateBackButtonState);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateBackButtonState());
   }
 
-  /// Centralized: single listener, never torn down during overlay↔AI page transitions.
-  /// Show Back when overlay focused OR AI page open; hide only when both closed.
+  /// Centralized: show Back when overlay focused, AI page open, or any pushed route (e.g. CreatorsPage).
   void _updateBackButtonState() {
     if (!mounted) return;
     final focus = GlobalBottomBar.focusNotifier.value;
     final aiPageOpen = GlobalBottomBar.isAiPageOpen;
-    final shouldShowBack = focus || aiPageOpen;
+    final canPop = MyApp.navigatorKey.currentState?.canPop() ?? false;
+    final shouldShowBack = focus || aiPageOpen || canPop;
     setState(() => _isFocused = focus);
     if (shouldShowBack) {
       _ensureBackButtonActive();
     } else {
-      // Delay teardown so we don't hide when transitioning AI page → overlay (focus not yet set)
       Future.delayed(const Duration(milliseconds: 100), () {
         if (!mounted) return;
         if (GlobalBottomBar.focusNotifier.value || GlobalBottomBar.isAiPageOpen) return;
+        if (MyApp.navigatorKey.currentState?.canPop() ?? false) return;
         _teardownBackButton();
       });
     }
@@ -62,10 +64,14 @@ class _AiSearchOverlayState extends State<AiSearchOverlay> {
     try {
       final webApp = tma.WebApp();
       _backButtonSubscription = webApp.eventHandler.backButtonClicked.listen((_) {
+        final navigator = MyApp.navigatorKey.currentState;
         if (GlobalBottomBar.isAiPageOpen) {
           GlobalBottomBar.popAiPageIfOpen();
         } else if (GlobalBottomBar.focusNotifier.value) {
           GlobalBottomBar.unfocusInput();
+        } else if (navigator != null && navigator.canPop()) {
+          AppHaptic.heavy();
+          navigator.pop();
         }
       });
       webApp.backButton.show();
@@ -87,6 +93,7 @@ class _AiSearchOverlayState extends State<AiSearchOverlay> {
   void dispose() {
     GlobalBottomBar.focusNotifier.removeListener(_updateBackButtonState);
     GlobalBottomBar.isAiPageOpenNotifier.removeListener(_updateBackButtonState);
+    MyApp.routeStackChangedNotifier.removeListener(_updateBackButtonState);
     _teardownBackButton();
     super.dispose();
   }

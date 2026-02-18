@@ -14,10 +14,18 @@ class WalletPanel extends StatelessWidget {
     super.key,
     required this.state,
     required this.mockState,
+    this.onCreateWallet,
+    this.onRestoreWallet,
   });
 
   final WalletPanelState state;
   final Map<String, dynamic> mockState;
+
+  /// Called when user taps "Create Wallet". When null, button is non-interactive (demo).
+  final VoidCallback? onCreateWallet;
+
+  /// Called when user taps "Restore Wallet". When null, button is non-interactive (demo).
+  final VoidCallback? onRestoreWallet;
 
   @override
   Widget build(BuildContext context) {
@@ -62,8 +70,8 @@ class WalletPanel extends StatelessWidget {
           spacing: 10,
           runSpacing: 10,
           children: [
-            _ghostButton('Create Wallet'),
-            _ghostButton('Restore Wallet'),
+            _ghostButton('Create Wallet', onTap: onCreateWallet),
+            _ghostButton('Restore Wallet', onTap: onRestoreWallet),
           ],
         ),
       ],
@@ -174,8 +182,8 @@ class WalletPanel extends StatelessWidget {
     );
   }
 
-  Widget _ghostButton(String label) {
-    return Container(
+  Widget _ghostButton(String label, {VoidCallback? onTap}) {
+    final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -192,6 +200,14 @@ class WalletPanel extends StatelessWidget {
         ),
       ),
     );
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: child,
+      );
+    }
+    return child;
   }
 
   Widget _badge(String label, Color color) {

@@ -10,6 +10,7 @@ import 'wallets_page.dart';
 import 'send_page.dart';
 import 'apps_page.dart';
 import 'get_page.dart';
+import 'creators_page.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -81,6 +82,13 @@ class _MainPageState extends State<MainPage> {
   // Feed items data with SVG images
   List<Map<String, dynamic>> get _feedItems {
     return [
+      {
+        'icon': 'assets/sample/mak/Creator.svg',
+        'primaryText': 'You are a creator',
+        'secondaryText': "Press to access a creators page",
+        'timestamp': '11:11',
+        'rightText': null,
+      },
       {
         'icon': 'assets/sample/mak/3.svg',
         'primaryText': 'Robat',
@@ -744,13 +752,10 @@ class _MainPageState extends State<MainPage> {
                           // Feed list - shown when Feed tab is selected
                           if (_selectedTab == 'Feed')
                             Column(
-                              children: _feedItems.map((item) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 20),
-                                  child: Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 0),
-                                    child: Row(
+                              children: _feedItems.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final item = entry.value;
+                                final row = Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
@@ -889,9 +894,29 @@ class _MainPageState extends State<MainPage> {
                                           ],
                                         ),
                                       ],
-                                    ),
+                                    );
+                                Widget cell = Padding(
+                                  padding: const EdgeInsets.only(bottom: 20),
+                                  child: Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 0),
+                                    child: row,
                                   ),
                                 );
+                                if (index == 0) {
+                                  cell = GestureDetector(
+                                    onTap: () {
+                                      AppHaptic.heavy();
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => const CreatorsPage(),
+                                        ),
+                                      );
+                                    },
+                                    child: cell,
+                                  );
+                                }
+                                return cell;
                               }).toList(),
                             ),
                           // Chat list - shown when Chat tab is selected

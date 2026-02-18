@@ -16,6 +16,9 @@ class MyApp extends StatefulWidget {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  /// Notifier fired when route stack changes (push/pop). Used so overlay can show/hide back button.
+  static final ValueNotifier<int> routeStackChangedNotifier = ValueNotifier<int>(0);
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -55,7 +58,10 @@ class _MyAppState extends State<MyApp> {
         return MaterialApp(
           title: "Hyperlinks.Space App",
           navigatorKey: MyApp.navigatorKey,
-          navigatorObservers: [MyApp.routeObserver],
+          navigatorObservers: [
+            MyApp.routeObserver,
+            _RouteStackObserver(),
+          ],
           builder: (context, child) {
             // Architecture: Independent overlays for top/bottom bars
             // - Top bar (GlobalLogoBar): Positioned at top, can hide/show dynamically
@@ -263,6 +269,19 @@ class _MyAppState extends State<MyApp> {
         );
       },
     );
+  }
+}
+
+/// Fires [MyApp.routeStackChangedNotifier] on push/pop so overlay can update back button.
+class _RouteStackObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    MyApp.routeStackChangedNotifier.value++;
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    MyApp.routeStackChangedNotifier.value++;
   }
 }
 

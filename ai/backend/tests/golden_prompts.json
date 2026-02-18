@@ -61,6 +61,14 @@
       "prompt": "$TON",
       "expect_contains": ["Blockchain: TON"],
       "forbid_contains": ["Description: not available", "Описание: неизвестно"]
+    },
+    {
+      "name": "capability_tools_request_shape",
+      "kind": "capability_tools_request",
+      "requires_capability": "tools",
+      "prompt": "tool capability check",
+      "expect_contains": [],
+      "forbid_contains": []
     }
   ]
 }

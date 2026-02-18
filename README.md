@@ -100,9 +100,10 @@ Set env vars per service in remote deploy as follows.
 
 - Required: `INNER_CALLS_KEY` - same shared key as bot/frontend/rag
 - Required: `RAG_URL` - URL of RAG backend service
-- Optional provider switch: `LLM_PROVIDER=ollama|openai`
+- Optional provider switch: `LLM_PROVIDER=ollama|openai|cocoon`
 - If `LLM_PROVIDER=openai`: `OPENAI_API_KEY` (required), `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
 - If `LLM_PROVIDER=ollama`: `OLLAMA_URL`, `OLLAMA_MODEL`
+- If `LLM_PROVIDER=cocoon`: `COCOON_CLIENT_URL` (default `http://127.0.0.1:10000`), `COCOON_MODEL` (optional)
 - Optional compatibility alias: `API_KEY`
 - Optional: platform `PORT`
 
@@ -187,6 +188,16 @@ Switch:
 - `8001` - RAG backend
 - `8080` - bot HTTP API (`/health`)
 - `11434` - Ollama API (when using `LLM_PROVIDER=ollama`)
+- `10000` - Cocoon client HTTP API (when using `LLM_PROVIDER=cocoon`; run Cocoon separately)
+
+**Local Cocoon client (optional)**  
+To use the Cocoon client for AI responses locally, run Cocoon in a separate terminal, then set the AI backend to use it.
+
+**Prerequisites:** CMake and Ninja must be installed and on your PATH (the script will fail with “The system cannot find the file specified” otherwise). On Windows: install [CMake](https://cmake.org) and Ninja (e.g. `choco install ninja`), add them to the system PATH, and run the script from a terminal that sees that PATH (e.g. a new PowerShell or Git Bash). On WSL/Linux: `sudo apt install cmake ninja-build`.
+
+1. Start Cocoon: `sh shell/run-cocoon-local.sh` (from repo root). This runs worker + proxy + client; the client listens on `http://127.0.0.1:10000`.
+2. In `ai/backend/.env`: set `LLM_PROVIDER=cocoon` and `COCOON_CLIENT_URL=http://127.0.0.1:10000` (optional: `COCOON_MODEL=default`).
+3. Start the rest of the stack as usual (`sh start.sh`). The bot will send chat requests to the Cocoon client’s OpenAI-compatible `/v1/chat/completions` endpoint.
 
 `start.sh` reports readiness for:
 
@@ -194,7 +205,7 @@ Switch:
 - AI root endpoint
 - Bot API `/health`
 - Frontend availability
-- Ollama model presence (when Ollama provider is active)
+- Ollama model presence (when Ollama provider is active), or Cocoon client reachability (when Cocoon provider is active)
 
 ## Frontend Deploy Flow
 

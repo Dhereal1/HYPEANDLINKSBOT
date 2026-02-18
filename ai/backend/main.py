@@ -37,6 +37,9 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# Cocoon client (OpenAI-compatible API; for local or Railway client)
+COCOON_CLIENT_URL = (os.getenv("COCOON_CLIENT_URL") or "http://127.0.0.1:10000").rstrip("/")
+COCOON_MODEL = os.getenv("COCOON_MODEL", "default")
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8001")
 RESPONSE_FORMAT_VERSION = "facts_analysis_v2"
 INNER_CALLS_KEY = (os.getenv("INNER_CALLS_KEY") or os.getenv("API_KEY") or "").strip()
@@ -57,7 +60,7 @@ def _key_fingerprint(value: str) -> str:
 
 
 def _log_runtime_env_snapshot() -> None:
-    provider = "openai" if LLM_PROVIDER == "openai" else "ollama"
+    provider = LLM_PROVIDER if LLM_PROVIDER in ("openai", "cocoon") else "ollama"
     logger.info("[ENV][AI] runtime configuration snapshot")
     logger.info("[ENV][AI] provider=%s", provider)
     logger.info("[ENV][AI] INNER_CALLS_KEY configured=%s preview=%s", bool(INNER_CALLS_KEY), _mask_secret(INNER_CALLS_KEY))
@@ -67,6 +70,9 @@ def _log_runtime_env_snapshot() -> None:
     logger.info("[ENV][AI] OLLAMA_MODEL=%s", OLLAMA_MODEL or "(missing)")
     logger.info("[ENV][AI] OPENAI_MODEL=%s", OPENAI_MODEL or "(missing)")
     logger.info("[ENV][AI] OPENAI_API_KEY configured=%s", bool(OPENAI_API_KEY))
+    if LLM_PROVIDER == "cocoon":
+        logger.info("[ENV][AI] COCOON_CLIENT_URL=%s", COCOON_CLIENT_URL)
+        logger.info("[ENV][AI] COCOON_MODEL=%s", COCOON_MODEL)
 
 
 def _inner_calls_headers() -> Dict[str, str]:
@@ -859,6 +865,8 @@ async def root():
 def _normalize_provider() -> str:
     if LLM_PROVIDER == "openai":
         return "openai"
+    if LLM_PROVIDER == "cocoon":
+        return "cocoon"
     return "ollama"
 
 
@@ -954,6 +962,46 @@ async def _check_llm_health(provider: str, timeout_s: float = 2.0) -> Dict[str, 
                 "error": str(e),
             }
 
+    if provider == "cocoon":
+        try:
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                # Reachability check (base URL; client may not expose /stats)
+                r = await client.get(COCOON_CLIENT_URL)
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            # Any response means the client is reachable (200, 404, 405 are common for GET /)
+            if r.status_code < 500:
+                return {
+                    "status": "ok",
+                    "provider": "cocoon",
+                    "model": COCOON_MODEL,
+                    "configured": True,
+                    "url": COCOON_CLIENT_URL,
+                    "latency_ms": elapsed_ms,
+                    "status_code": r.status_code,
+                }
+            return {
+                "status": "error",
+                "provider": "cocoon",
+                "model": COCOON_MODEL,
+                "configured": True,
+                "url": COCOON_CLIENT_URL,
+                "latency_ms": elapsed_ms,
+                "status_code": r.status_code,
+                "error": f"Cocoon client returned {r.status_code}",
+            }
+        except Exception as e:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            return {
+                "status": "error",
+                "provider": "cocoon",
+                "model": COCOON_MODEL,
+                "configured": True,
+                "url": COCOON_CLIENT_URL,
+                "latency_ms": elapsed_ms,
+                "error": str(e),
+            }
+
+    # ollama
     try:
         async with httpx.AsyncClient(timeout=timeout_s) as client:
             r = await client.get(f"{OLLAMA_URL.rstrip('/')}/api/tags")
@@ -1059,6 +1107,8 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
     provider = LLM_PROVIDER
     if provider == "openai":
         model = request.model or OPENAI_MODEL
+    elif provider == "cocoon":
+        model = request.model or COCOON_MODEL
     else:
         provider = "ollama"
         model = request.model or OLLAMA_MODEL
@@ -1607,10 +1657,112 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
                 yield json.dumps({"token": full_response, "done": False}) + "\n"
             yield json.dumps({"response": _combine_ticker_output(full_response), "done": True}) + "\n"
 
+    async def generate_cocoon_response():
+        inference_start = time.perf_counter()
+        first_token_logged = False
+        full_response = ""
+        prefix_sent = False
+        headers = {"Content-Type": "application/json"}
+        url = f"{COCOON_CLIENT_URL}/v1/chat/completions"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if ticker_facts_text:
+                prefix = _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n")
+                yield json.dumps({"token": prefix, "done": False}) + "\n"
+                prefix_sent = True
+            if request.stream:
+                async with client.stream("POST", url, headers=headers, json=openai_request) as response:
+                    stream_open_ms = int((time.perf_counter() - inference_start) * 1000)
+                    logger.info(f"Cocoon stream opened: {stream_open_ms}ms, model={model}")
+
+                    if response.status_code != 200:
+                        error_detail = str(response.status_code)
+                        try:
+                            body = await response.aread()
+                            error_data = json.loads(body)
+                            if isinstance(error_data, dict):
+                                error_obj = error_data.get("error", {})
+                                error_detail = error_obj.get("message", error_detail)
+                        except Exception:
+                            pass
+                        if ticker_facts_text:
+                            fallback = _combine_ticker_output(
+                                "Анализ недоступен в данный момент." if user_lang == "ru" else "Analysis is unavailable right now."
+                            )
+                            if not prefix_sent:
+                                yield json.dumps({"token": _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n"), "done": False}) + "\n"
+                            yield json.dumps({"response": fallback, "done": True}) + "\n"
+                        else:
+                            yield json.dumps({"error": f"Cocoon error: {error_detail}"}) + "\n"
+                        return
+
+                    async for line in response.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta") or {}
+                        content = delta.get("content")
+                        if content:
+                            if not first_token_logged:
+                                ttft_ms = int((time.perf_counter() - inference_start) * 1000)
+                                logger.info(f"First token: {ttft_ms}ms, model={model}")
+                                first_token_logged = True
+                            full_response += content
+                            if not ticker_facts_text:
+                                yield json.dumps({"token": content, "done": False}) + "\n"
+
+                    total_ms = int((time.perf_counter() - inference_start) * 1000)
+                    logger.info(f"Total time: {total_ms}ms, model={model}")
+                    yield json.dumps({"response": _combine_ticker_output(full_response), "done": True}) + "\n"
+                    return
+
+            response = await client.post(url, headers=headers, json=openai_request)
+            if response.status_code != 200:
+                error_detail = str(response.status_code)
+                try:
+                    error_data = response.json()
+                    if isinstance(error_data, dict):
+                        error_obj = error_data.get("error", {})
+                        error_detail = error_obj.get("message", error_detail)
+                except Exception:
+                    pass
+                if ticker_facts_text:
+                    fallback = _combine_ticker_output(
+                        "Анализ недоступен в данный момент." if user_lang == "ru" else "Analysis is unavailable right now."
+                    )
+                    if not prefix_sent:
+                        yield json.dumps({"token": _normalize_paragraph_spacing(f"{ticker_facts_text}\n\n"), "done": False}) + "\n"
+                    yield json.dumps({"response": fallback, "done": True}) + "\n"
+                else:
+                    yield json.dumps({"error": f"Cocoon error: {error_detail}"}) + "\n"
+                return
+
+            data = response.json()
+            choices = data.get("choices") or []
+            if choices:
+                message = choices[0].get("message") or {}
+                full_response = message.get("content", "") or ""
+            if full_response:
+                yield json.dumps({"token": full_response, "done": False}) + "\n"
+            yield json.dumps({"response": _combine_ticker_output(full_response), "done": True}) + "\n"
+
     async def generate_response():
         try:
             if provider == "openai":
                 async for chunk in generate_openai_response():
+                    yield chunk
+                return
+            if provider == "cocoon":
+                async for chunk in generate_cocoon_response():
                     yield chunk
                 return
             async for chunk in generate_ollama_response():
@@ -1620,6 +1772,8 @@ async def chat(request: ChatRequest, api_key: str = Depends(verify_api_key)):
         except httpx.RequestError as e:
             if provider == "openai":
                 yield json.dumps({"error": f"Cannot connect to OpenAI API. Error: {str(e)}"}) + "\n"
+            elif provider == "cocoon":
+                yield json.dumps({"error": f"Cannot connect to Cocoon at {COCOON_CLIENT_URL}. Error: {str(e)}"}) + "\n"
             else:
                 yield json.dumps({"error": f"Cannot connect to Ollama at {OLLAMA_URL}. Error: {str(e)}"}) + "\n"
         except Exception as e:

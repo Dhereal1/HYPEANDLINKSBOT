@@ -122,6 +122,10 @@ Set env vars per service in remote deploy as follows.
 - Optional compatibility alias: `BOT_API_KEY`
 - Optional (theme): `THEME`
 
+### Google Cloud (Cocoon on GCP)
+
+When following [Cocoon on Google Cloud](docs/COCOON_GOOGLE_CLOUD.md) (create VM, firewall, SSH, Cloud Run, etc.), **skip setting `GC_HS_PROJECT_ID`** in your shell. Current practice: set the default project once with `gcloud config set project <project-id>` (e.g. `gcloud config set project hyperlinksspacebot`). Then all `gcloud` commands in that session (and later) use the default project and you don’t need any project-related env var. The Cocoon GCP doc may still show `$GC_HS_PROJECT_ID` in examples for clarity; you can omit it and rely on the configured default.
+
 ## Repository Structure
 
 ```

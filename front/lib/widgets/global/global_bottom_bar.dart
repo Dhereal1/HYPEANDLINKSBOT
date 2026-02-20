@@ -84,10 +84,17 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
   final FocusNode _focusNode = FocusNode();
   final ScrollController _inputScrollController = ScrollController();
   bool _isFocused = false;
-  static const int _maxVisibleLines = 11;
+  /// Max lines before bar stops growing; bar height capped at [_maxBarHeight].
+  static const int _maxLinesBeforeScroll = 7;
   static const double _fontSize = 15.0;
-  static const double _lineHeight = 1.0;
-  static const double _verticalPadding = 22.0;
+  /// Line height in logical pixels (user requirement: 20px).
+  static const double _lineHeightPx = 20.0;
+  /// Top and bottom indent of the bar (user requirement: 20px).
+  static const double _verticalPadding = 20.0;
+  /// Bar stops extending at this height (7 lines × 20px + 20 top + 20 bottom = 180).
+  static const double _maxBarHeight = 180.0;
+  /// Content height when in scroll mode (180 - 40 = 140).
+  static const double _scrollModeContentHeight = _maxBarHeight - 2 * _verticalPadding;
 
   @override
   void initState() {
@@ -110,9 +117,7 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
 
     // Listen to global unfocus requests
     GlobalBottomBar._focusNotifier.addListener(_onGlobalFocusChange);
-    _controller.addListener(() {
-      setState(() {});
-    });
+    _controller.addListener(_onInputTextChanged);
     _inputScrollController.addListener(_onInputScrollChanged);
   }
 
@@ -124,6 +129,7 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
 
   @override
   void dispose() {
+    _controller.removeListener(_onInputTextChanged);
     GlobalBottomBar._focusNotifier.removeListener(_onGlobalFocusChange);
     GlobalBottomBar._controllerInstance = null;
     GlobalBottomBar._submitCurrentInputCallback = null;
@@ -133,6 +139,25 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onInputTextChanged() {
+    setState(() {});
+    // Keep last line at bottom (20px from bar): scroll to end when in scroll mode so the typing line stays fixed.
+    void scrollToBottom() {
+      if (!mounted) return;
+      if (_inputScrollController.hasClients) {
+        final pos = _inputScrollController.position;
+        if (pos.maxScrollExtent > 0) {
+          _inputScrollController.jumpTo(pos.maxScrollExtent);
+        }
+      }
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scrollToBottom();
+      // Second frame so layout is fully updated (e.g. when crossing into scroll mode).
+      WidgetsBinding.instance.addPostFrameCallback((_) => scrollToBottom());
+    });
   }
 
   void _onInputScrollChanged() {
@@ -184,16 +209,18 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
       maxLines: null,
     )..layout(maxWidth: maxWidth);
     final lines = painter.computeLineMetrics().length;
-    return lines.clamp(1, _maxVisibleLines);
+    return lines.clamp(1, 999);
   }
 
   @override
   Widget build(BuildContext context) {
+    // 20px line height: height is multiplier of fontSize; even leading so no cumulative shift.
     final textStyle = TextStyle(
       fontFamily: 'Aeroport',
       fontSize: _fontSize,
       fontWeight: FontWeight.w500,
-      height: _lineHeight,
+      height: _lineHeightPx / _fontSize,
+      leadingDistribution: TextLeadingDistribution.even,
       color: AppTheme.textColor,
     );
 
@@ -205,138 +232,153 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
               ? 600.0
               : outerConstraints.maxWidth;
           final inputWidth = (constrainedWidth - 15 - 15 - 5 - 15).clamp(80.0, 560.0);
+          // Match TextField content width (decoration has right: 6) so line count matches and last line stays anchored.
+          final textContentWidth = (inputWidth - 6).clamp(80.0, 560.0);
           final visualLines = _computeVisualLineCount(
             text: _controller.text,
             style: textStyle,
-            maxWidth: inputWidth,
+            maxWidth: textContentWidth,
           );
-          final computedHeight =
-              (_verticalPadding * 2) + (visualLines * _fontSize * _lineHeight);
+          // Bar extends for 1–7 lines (20px per line + 20 top + 20 bottom), then stays at 180px.
+          final contentLines = visualLines.clamp(1, _maxLinesBeforeScroll);
+          final computedHeight = _verticalPadding * 2 + _lineHeightPx * contentLines;
           _currentBarHeight = computedHeight;
 
-          final showInputScrollbar = _inputScrollController.hasClients &&
+          final isScrollMode = visualLines > _maxLinesBeforeScroll;
+          final showInputScrollbar = isScrollMode &&
+              _inputScrollController.hasClients &&
               _inputScrollController.position.maxScrollExtent > 0;
+
+          final textField = TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            enabled: true,
+            readOnly: false,
+            showCursor: true,
+            enableInteractiveSelection: true,
+            cursorColor: AppTheme.textColor,
+            cursorHeight: _fontSize,
+            maxLines: null,
+            minLines: 1,
+            textInputAction: TextInputAction.send,
+            scrollController: _inputScrollController,
+            textAlignVertical: TextAlignVertical.bottom,
+            style: textStyle,
+            onSubmitted: (_) => _navigateToNewPage(),
+            decoration: InputDecoration(
+              hintText: (_isFocused || _controller.text.isNotEmpty)
+                  ? null
+                  : 'AI & Search',
+              hintStyle: textStyle,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              contentPadding: const EdgeInsets.only(left: 0, right: 6, top: 0, bottom: 0),
+            ),
+          );
 
           return Container(
             width: double.infinity,
             height: computedHeight,
             color: AppTheme.backgroundColor,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 15, right: 15),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: computedHeight,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: TextField(
-                                  controller: _controller,
-                                  focusNode: _focusNode,
-                                  enabled: true,
-                                  readOnly: false,
-                                  showCursor: true,
-                                  enableInteractiveSelection: true,
-                                  cursorColor: AppTheme.textColor,
-                                  cursorHeight: _fontSize,
-                                  maxLines: _maxVisibleLines,
-                                  minLines: 1,
-                                  textInputAction: TextInputAction.send,
-                                  scrollController: _inputScrollController,
-                                  style: textStyle,
-                                  onSubmitted: (_) => _navigateToNewPage(),
-                                  decoration: InputDecoration(
-                                    hintText: (_isFocused || _controller.text.isNotEmpty)
-                                        ? null
-                                        : 'AI & Search',
-                                    hintStyle: textStyle,
-                                    border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.only(
-                                      left: 0,
-                                      right: 6,
-                                      top: _verticalPadding,
-                                      bottom: _verticalPadding,
-                                    ),
-                                  ),
+            child: Stack(
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 15, right: 15),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: _verticalPadding),
+                                SizedBox(
+                                  height: isScrollMode
+                                      ? _scrollModeContentHeight
+                                      : _lineHeightPx * contentLines,
+                                  child: textField,
                                 ),
+                                const SizedBox(height: _verticalPadding),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: _verticalPadding),
+                            child: GestureDetector(
+                              onTap: () {
+                                AppHaptic.heavy();
+                                _navigateToNewPage();
+                              },
+                              child: SvgPicture.asset(
+                                AppTheme.isLightTheme
+                                    ? 'assets/icons/apply_light.svg'
+                                    : 'assets/icons/apply_dark.svg',
+                                width: 15,
+                                height: 10,
                               ),
-                              if (showInputScrollbar)
-                                Positioned(
-                                  right: 0,
-                                  top: _verticalPadding,
-                                  bottom: _verticalPadding,
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final containerHeight = constraints.maxHeight;
-                                      if (containerHeight <= 0) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      try {
-                                        final position = _inputScrollController.position;
-                                        final maxScroll = position.maxScrollExtent;
-                                        final currentScroll = position.pixels;
-                                        final viewportHeight = position.viewportDimension;
-                                        final totalHeight = viewportHeight + maxScroll;
-                                        if (maxScroll <= 0 || totalHeight <= 0) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        final ratio =
-                                            (viewportHeight / totalHeight).clamp(0.0, 1.0);
-                                        final indicatorHeight =
-                                            (containerHeight * ratio).clamp(10.0, containerHeight);
-                                        final availableSpace =
-                                            (containerHeight - indicatorHeight).clamp(0.0, containerHeight);
-                                        final scrollPosition =
-                                            (currentScroll / maxScroll).clamp(0.0, 1.0);
-                                        final top = (scrollPosition * availableSpace)
-                                            .clamp(0.0, containerHeight);
-                                        return Padding(
-                                          padding: EdgeInsets.only(top: top),
-                                          child: Container(
-                                            width: 1,
-                                            height: indicatorHeight,
-                                            color: const Color(0xFF818181),
-                                          ),
-                                        );
-                                      } catch (_) {
-                                        return const SizedBox.shrink();
-                                      }
-                                    },
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 5),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 22),
-                        child: GestureDetector(
-                          onTap: () {
-                            AppHaptic.heavy();
-                            _navigateToNewPage();
-                          },
-                          child: SvgPicture.asset(
-                            AppTheme.isLightTheme
-                                ? 'assets/icons/apply_light.svg'
-                                : 'assets/icons/apply_dark.svg',
-                            width: 15,
-                            height: 10,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                if (showInputScrollbar)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final barHeight = constraints.maxHeight;
+                        if (barHeight <= 0) {
+                          return const SizedBox.shrink();
+                        }
+                        try {
+                          final position = _inputScrollController.position;
+                          final maxScroll = position.maxScrollExtent;
+                          final currentScroll = position.pixels;
+                          final viewportHeight = position.viewportDimension;
+                          final totalHeight = viewportHeight + maxScroll;
+                          if (maxScroll <= 0 || totalHeight <= 0) {
+                            return const SizedBox.shrink();
+                          }
+                          final ratio =
+                              (viewportHeight / totalHeight).clamp(0.0, 1.0);
+                          final indicatorHeight =
+                              (barHeight * ratio).clamp(10.0, barHeight);
+                          final availableSpace =
+                              (barHeight - indicatorHeight).clamp(0.0, barHeight);
+                          final scrollPosition =
+                              (currentScroll / maxScroll).clamp(0.0, 1.0);
+                          final top = (scrollPosition * availableSpace)
+                              .clamp(0.0, barHeight);
+                          return Padding(
+                            padding: EdgeInsets.only(top: top),
+                            child: Container(
+                              width: 4,
+                              height: indicatorHeight,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF818181),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          );
+                        } catch (_) {
+                          return const SizedBox.shrink();
+                        }
+                      },
+                    ),
+                  ),
+              ],
             ),
           );
         },

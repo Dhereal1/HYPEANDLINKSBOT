@@ -1,8 +1,8 @@
+Text input in bottom bar
+
 edit interval healthcheck
 
 Ticker link
-
-Text input in bottom bar
 
 Scrolling in AI widget fix
 

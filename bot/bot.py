@@ -406,6 +406,49 @@ async def claim_wallet_for_username(username: str) -> str:
         return "db_unavailable"
 
 
+async def ensure_user_exists_from_verified_user(user: dict) -> bool:
+    """
+    Upsert a verified Telegram user into users table.
+    Returns True on success, False if DB is unavailable or insert fails.
+    """
+    telegram_id = user.get("id")
+    username = user.get("username")
+    if telegram_id is None or not username:
+        return False
+
+    pool = await get_db_pool()
+    if pool is None:
+        return False
+
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO users (
+                    telegram_id, username, first_name, last_name, language_code, last_active_at
+                )
+                VALUES ($1, $2, $3, $4, $5, (now() AT TIME ZONE 'UTC') + INTERVAL '3 hours')
+                ON CONFLICT (telegram_id)
+                DO UPDATE SET
+                    username = EXCLUDED.username,
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    language_code = EXCLUDED.language_code,
+                    last_active_at = (now() AT TIME ZONE 'UTC') + INTERVAL '3 hours',
+                    updated_at = (now() AT TIME ZONE 'UTC') + INTERVAL '3 hours'
+                """,
+                int(telegram_id),
+                username,
+                user.get("first_name"),
+                user.get("last_name"),
+                user.get("language_code"),
+            )
+        return True
+    except Exception as e:
+        print(f"Error ensuring verified user row: {e}")
+        return False
+
+
 async def ensure_user_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler that ensures user exists in database (runs on all messages, non-blocking)"""
     # Run database operation asynchronously without blocking the response
@@ -633,25 +676,35 @@ async def auth_telegram(request: web.Request) -> web.Response:
     if not username:
         return _json_response({"ok": False, "error": "username_required"}, status=400)
 
-    claim_status = await claim_wallet_for_username(username)
-    if claim_status == "db_unavailable":
+    ensured = await ensure_user_exists_from_verified_user(user)
+    if not ensured:
         return _json_response({"ok": False, "error": "db_unavailable"}, status=503)
 
-    return _json_response(
-        {
-            "ok": True,
-            "user": {
-                "id": user.get("id"),
-                "username": username,
-                "first_name": user.get("first_name"),
-                "last_name": user.get("last_name"),
-                "language_code": user.get("language_code"),
+    claim_status = await claim_wallet_for_username(username)
+    if claim_status in {"assigned", "already_assigned"}:
+        print(f"auth_telegram username={username} wallet_status={claim_status}")
+        return _json_response(
+            {
+                "ok": True,
+                "user": {
+                    "id": user.get("id"),
+                    "username": username,
+                    "first_name": user.get("first_name"),
+                    "last_name": user.get("last_name"),
+                    "language_code": user.get("language_code"),
+                },
+                "wallet_status": claim_status,
+                "newly_assigned": claim_status == "assigned",
             },
-            "wallet_status": claim_status,
-            "newly_assigned": claim_status == "assigned",
-        },
-        status=200,
-    )
+            status=200,
+        )
+    if claim_status == "user_not_found":
+        return _json_response({"ok": False, "error": "user_not_found"}, status=404)
+    if claim_status == "invalid_username":
+        return _json_response({"ok": False, "error": "invalid_username"}, status=400)
+    if claim_status == "db_unavailable":
+        return _json_response({"ok": False, "error": "db_unavailable"}, status=503)
+    return _json_response({"ok": False, "error": "wallet_claim_unknown_status"}, status=500)
 
 
 async def http_wallet_ensure_handler(request: web.Request) -> web.Response:

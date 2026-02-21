@@ -42,6 +42,10 @@ def test_auth_telegram_success_assigned(monkeypatch):
     async def _claim(_username: str) -> str:
         return "assigned"
 
+    async def _ensure(_user: dict) -> bool:
+        return True
+
+    monkeypatch.setattr(bot_module, "ensure_user_exists_from_verified_user", _ensure)
     monkeypatch.setattr(bot_module, "claim_wallet_for_username", _claim)
 
     resp = _call_auth({"initData": "ok"})
@@ -82,6 +86,10 @@ def test_auth_telegram_db_unavailable(monkeypatch):
     async def _claim(_username: str) -> str:
         return "db_unavailable"
 
+    async def _ensure(_user: dict) -> bool:
+        return True
+
+    monkeypatch.setattr(bot_module, "ensure_user_exists_from_verified_user", _ensure)
     monkeypatch.setattr(bot_module, "claim_wallet_for_username", _claim)
 
     resp = _call_auth({"initData": "ok"})
@@ -95,3 +103,65 @@ def test_auth_telegram_missing_initdata(monkeypatch):
     resp = _call_auth({})
     assert resp.status == 400
     assert _json(resp) == {"ok": False, "error": "missing_initData"}
+
+
+def test_auth_telegram_ensure_user_db_unavailable(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "token")
+    monkeypatch.setattr(
+        bot_module,
+        "verify_telegram_webapp_init_data",
+        lambda *_args, **_kwargs: {"user": {"id": 1, "username": "alice"}},
+    )
+
+    async def _ensure(_user: dict) -> bool:
+        return False
+
+    monkeypatch.setattr(bot_module, "ensure_user_exists_from_verified_user", _ensure)
+
+    resp = _call_auth({"initData": "ok"})
+    assert resp.status == 503
+    assert _json(resp) == {"ok": False, "error": "db_unavailable"}
+
+
+def test_auth_telegram_user_not_found_mapping(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "token")
+    monkeypatch.setattr(
+        bot_module,
+        "verify_telegram_webapp_init_data",
+        lambda *_args, **_kwargs: {"user": {"id": 1, "username": "alice"}},
+    )
+
+    async def _ensure(_user: dict) -> bool:
+        return True
+
+    async def _claim(_username: str) -> str:
+        return "user_not_found"
+
+    monkeypatch.setattr(bot_module, "ensure_user_exists_from_verified_user", _ensure)
+    monkeypatch.setattr(bot_module, "claim_wallet_for_username", _claim)
+
+    resp = _call_auth({"initData": "ok"})
+    assert resp.status == 404
+    assert _json(resp) == {"ok": False, "error": "user_not_found"}
+
+
+def test_auth_telegram_unknown_claim_status_mapping(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "token")
+    monkeypatch.setattr(
+        bot_module,
+        "verify_telegram_webapp_init_data",
+        lambda *_args, **_kwargs: {"user": {"id": 1, "username": "alice"}},
+    )
+
+    async def _ensure(_user: dict) -> bool:
+        return True
+
+    async def _claim(_username: str) -> str:
+        return "weird_status"
+
+    monkeypatch.setattr(bot_module, "ensure_user_exists_from_verified_user", _ensure)
+    monkeypatch.setattr(bot_module, "claim_wallet_for_username", _claim)
+
+    resp = _call_auth({"initData": "ok"})
+    assert resp.status == 500
+    assert _json(resp) == {"ok": False, "error": "wallet_claim_unknown_status"}

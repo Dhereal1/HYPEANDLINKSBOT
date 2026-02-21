@@ -195,6 +195,20 @@ async def init_db():
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)
         """)
+        await conn.execute("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS has_wallet BOOLEAN NOT NULL DEFAULT FALSE
+        """)
+        await conn.execute("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS wallet_assigned_at TIMESTAMP NULL
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users((lower(username)))
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_has_wallet ON users(has_wallet)
+        """)
         
         # Create messages table for conversation history
         # Each user's messages are stored separately using telegram_id as the key
@@ -321,6 +335,74 @@ async def get_last_message_by_role(telegram_id: int, role: str) -> str | None:
     except Exception as e:
         print(f"Error retrieving last {role} message: {e}")
         return None
+
+
+def _normalize_username(username: str) -> str:
+    value = (username or "").strip()
+    if value.startswith("@"):
+        value = value[1:]
+    return value.lower()
+
+
+async def claim_wallet_for_username(username: str) -> str:
+    """
+    Atomically mark wallet assignment in the existing users DB.
+
+    Returns one of:
+    - assigned
+    - already_assigned
+    - user_not_found
+    - invalid_username
+    - db_unavailable
+    """
+    normalized = _normalize_username(username)
+    if not normalized:
+        return "invalid_username"
+
+    pool = await get_db_pool()
+    if pool is None:
+        return "db_unavailable"
+
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                WITH candidate AS (
+                    SELECT telegram_id
+                    FROM users
+                    WHERE lower(username) = $1
+                    ORDER BY last_active_at DESC NULLS LAST, updated_at DESC NULLS LAST
+                    LIMIT 1
+                    FOR UPDATE
+                )
+                UPDATE users u
+                SET
+                    has_wallet = TRUE,
+                    wallet_assigned_at = COALESCE(
+                        u.wallet_assigned_at,
+                        (now() AT TIME ZONE 'UTC') + INTERVAL '3 hours'
+                    ),
+                    updated_at = (now() AT TIME ZONE 'UTC') + INTERVAL '3 hours'
+                FROM candidate c
+                WHERE
+                    u.telegram_id = c.telegram_id
+                    AND COALESCE(u.has_wallet, FALSE) = FALSE
+                RETURNING u.telegram_id
+            """, normalized)
+            if row:
+                return "assigned"
+
+            exists = await conn.fetchval("""
+                SELECT 1
+                FROM users
+                WHERE lower(username) = $1
+                LIMIT 1
+            """, normalized)
+            if exists:
+                return "already_assigned"
+            return "user_not_found"
+    except Exception as e:
+        print(f"Error claiming wallet for username={normalized}: {e}")
+        return "db_unavailable"
 
 
 async def ensure_user_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -478,6 +560,38 @@ async def http_chat_proxy_handler(request: web.Request) -> web.Response:
     )
 
 
+async def http_wallet_ensure_handler(request: web.Request) -> web.Response:
+    authorized, auth_error = _authorize_request(request)
+    if not authorized:
+        return auth_error  # type: ignore[return-value]
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body."}, status=400)
+
+    username = payload.get("username") if isinstance(payload, dict) else None
+    if not isinstance(username, str):
+        return _json_response({"error": "username is required."}, status=400)
+
+    result = await claim_wallet_for_username(username)
+    if result == "assigned":
+        return _json_response(
+            {"status": "ok", "wallet_status": "assigned", "newly_assigned": True},
+            status=200,
+        )
+    if result == "already_assigned":
+        return _json_response(
+            {"status": "ok", "wallet_status": "already_assigned", "newly_assigned": False},
+            status=200,
+        )
+    if result == "user_not_found":
+        return _json_response({"error": "user_not_found"}, status=404)
+    if result == "invalid_username":
+        return _json_response({"error": "invalid_username"}, status=400)
+    return _json_response({"error": "database_unavailable"}, status=503)
+
+
 async def start_http_api_server() -> None:
     global _http_runner
     if _http_runner is not None:
@@ -487,7 +601,9 @@ async def start_http_api_server() -> None:
     app.router.add_get("/", http_root_handler)
     app.router.add_get("/health", http_health_handler)
     app.router.add_post("/api/chat", http_chat_proxy_handler)
+    app.router.add_post("/wallet/ensure", http_wallet_ensure_handler)
     app.router.add_options("/api/chat", http_options_handler)
+    app.router.add_options("/wallet/ensure", http_options_handler)
     app.router.add_options("/", http_options_handler)
     app.router.add_options("/health", http_options_handler)
 

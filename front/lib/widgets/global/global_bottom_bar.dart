@@ -89,8 +89,10 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
   static const double _fontSize = 15.0;
   /// Line height in logical pixels (user requirement: 20px).
   static const double _lineHeightPx = 20.0;
-  /// Top and bottom indent of the bar (user requirement: 20px).
+  /// Top and bottom indent for text/placeholder (user requirement: 20px from bottom at start and on input).
   static const double _verticalPadding = 20.0;
+  /// Apply icon distance from bottom (user requirement: 25px anytime).
+  static const double _applyIconBottomPadding = 25.0;
   /// Bar stops extending at this height (7 lines × 20px + 20 top + 20 bottom = 180).
   static const double _maxBarHeight = 180.0;
   /// Content height when in scroll mode (180 - 40 = 140).
@@ -310,7 +312,7 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
                           ),
                           const SizedBox(width: 5),
                           Padding(
-                            padding: const EdgeInsets.only(bottom: _verticalPadding),
+                            padding: const EdgeInsets.only(bottom: _applyIconBottomPadding),
                             child: GestureDetector(
                               onTap: () {
                                 AppHaptic.heavy();

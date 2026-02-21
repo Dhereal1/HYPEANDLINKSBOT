@@ -633,6 +633,10 @@ async def auth_telegram(request: web.Request) -> web.Response:
     if not username:
         return _json_response({"ok": False, "error": "username_required"}, status=400)
 
+    claim_status = await claim_wallet_for_username(username)
+    if claim_status == "db_unavailable":
+        return _json_response({"ok": False, "error": "db_unavailable"}, status=503)
+
     return _json_response(
         {
             "ok": True,
@@ -643,6 +647,8 @@ async def auth_telegram(request: web.Request) -> web.Response:
                 "last_name": user.get("last_name"),
                 "language_code": user.get("language_code"),
             },
+            "wallet_status": claim_status,
+            "newly_assigned": claim_status == "assigned",
         },
         status=200,
     )

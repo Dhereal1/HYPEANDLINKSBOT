@@ -16,6 +16,9 @@ import hashlib
 from pathlib import Path
 from dotenv import load_dotenv
 from prompt_i18n import localize_prompt_with_model
+from wallet.repo import InMemoryWalletRepository
+from wallet.repo_postgres import PostgresConfig, PostgresWalletRepository
+from wallet.service import WalletService, serialize_wallet_machine
 
 logger = logging.getLogger(__name__)
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -43,6 +46,8 @@ COCOON_MODEL = os.getenv("COCOON_MODEL", "default")
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8001")
 RESPONSE_FORMAT_VERSION = "facts_analysis_v2"
 INNER_CALLS_KEY = (os.getenv("INNER_CALLS_KEY") or os.getenv("API_KEY") or "").strip()
+WALLET_REPO = (os.getenv("WALLET_REPO") or "memory").strip().lower()
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 
 
 def _mask_secret(value: str, visible: int = 4) -> str:
@@ -844,6 +849,19 @@ class ChatRequest(BaseModel):
     top_logprobs: Optional[int] = Field(default=None, description="Number of most likely tokens to return at each token position when logprobs are enabled")
 
 
+class WalletCreateRequest(BaseModel):
+    user_id: str = Field(..., description="Application user identifier")
+    wallet_id: Optional[str] = Field(default=None, description="Optional external wallet id")
+    address: Optional[str] = Field(default=None, description="Optional pre-generated address")
+    public_key: Optional[str] = Field(default=None, description="Optional pre-generated public key")
+
+
+class WalletAllocateRequest(BaseModel):
+    amount: str
+    asset: str = "DLLR"
+    tx_ref: str | None = None
+
+
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
@@ -1093,6 +1111,79 @@ async def health():
     }
 
     return JSONResponse(content=payload, status_code=200 if overall_ok else 503)
+
+
+@app.get("/capabilities")
+async def capabilities():
+    return JSONResponse(content=_build_capabilities_payload(), status_code=200)
+
+
+_wallet_repo = InMemoryWalletRepository()
+if WALLET_REPO == "postgres":
+    # Keep runtime non-breaking while Postgres repository is a stub.
+    if not DATABASE_URL:
+        logger.warning("[WALLET] WALLET_REPO=postgres set without DATABASE_URL; falling back to memory")
+    else:
+        _ = PostgresConfig(database_url=DATABASE_URL)
+        _ = PostgresWalletRepository
+        logger.warning("[WALLET] WALLET_REPO=postgres requested, but repository is stubbed; falling back to memory")
+elif WALLET_REPO != "memory":
+    logger.warning("[WALLET] unknown WALLET_REPO=%s; falling back to memory", WALLET_REPO)
+_wallet_service = WalletService(repo=_wallet_repo)
+
+
+@app.post("/wallet/create")
+async def wallet_create(request: WalletCreateRequest, api_key: str = Depends(verify_api_key)):
+    user_id = (request.user_id or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+
+    try:
+        machine = _wallet_service.create_wallet(
+            user_id=user_id,
+            wallet_id=request.wallet_id,
+            address=request.address,
+            public_key=request.public_key,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return JSONResponse(content=serialize_wallet_machine(machine), status_code=200)
+
+
+@app.get("/wallet/{wallet_id}")
+def wallet_get(wallet_id: str):
+    m = _wallet_service.get(wallet_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="wallet_not_found")
+    return serialize_wallet_machine(m)
+
+
+@app.post("/wallet/{wallet_id}/allocate")
+def wallet_allocate(wallet_id: str, req: WalletAllocateRequest):
+    try:
+        m = _wallet_service.allocate(
+            wallet_id=wallet_id,
+            amount=req.amount,
+            asset=req.asset,
+            tx_ref=req.tx_ref,
+        )
+    except ValueError as e:
+        if str(e) == "wallet_not_found":
+            raise HTTPException(status_code=404, detail="wallet_not_found")
+        raise
+    return serialize_wallet_machine(m)
+
+
+@app.post("/wallet/{wallet_id}/activate")
+def wallet_activate(wallet_id: str):
+    try:
+        m = _wallet_service.activate(wallet_id=wallet_id)
+    except ValueError as e:
+        if str(e) == "wallet_not_found":
+            raise HTTPException(status_code=404, detail="wallet_not_found")
+        raise
+    return serialize_wallet_machine(m)
 
 
 @app.post("/api/chat")

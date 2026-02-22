@@ -2,25 +2,25 @@ import 'package:flutter/material.dart';
 import '../app/theme/app_theme.dart';
 import '../widgets/common/copyable_detail_page.dart';
 
-class GetPage extends StatelessWidget {
-  const GetPage({super.key});
+class MnemonicsPage extends StatelessWidget {
+  const MnemonicsPage({super.key});
 
-  static const String _addressText =
-      'EQCNT_JdH8Vc\n-kJyr_-HhBge\n7JpMMiR8X8yn\nsUJalr_qRiKE';
+  static const String _mnemonicsText =
+      'breeze arch just cactus\nfragile author satoshi hurdle\npeace record behind vendor\nacross local exact fatigue\naugust festival indoor movie\nurge garment rule permit';
 
   @override
   Widget build(BuildContext context) {
     return CopyableDetailPage(
-      copyText: _addressText,
+      copyText: _mnemonicsText,
       centerChildBuilder: () {
         final baseColor = Theme.of(context).textTheme.bodyLarge?.color ?? AppTheme.textColor;
         return Text(
-          _addressText,
+          _mnemonicsText,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 30,
-            height: 55 / 30,
-            fontWeight: FontWeight.w500,
+            fontSize: 15,
+            height: 30 / 15,
+            fontWeight: FontWeight.w600,
             color: baseColor,
           ),
         );

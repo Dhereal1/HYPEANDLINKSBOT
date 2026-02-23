@@ -5,11 +5,27 @@
 # - 11434 (Ollama) [default]
 
 param(
-  [switch]$KeepOllama
+  [switch]$KeepOllama,
+  [switch]$CheckOnly
 )
 
 $ErrorActionPreference = "SilentlyContinue"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
+function Test-ServiceTerminalsRunning {
+  $myPid = $PID
+  # By command line (powershell -File ...\HyperlinksSpaceBot_<SERVICE>.ps1)
+  $byCmd = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "HyperlinksSpaceBot_(RAG|AI|BOT|FRONT)\.ps1" } |
+    Select-Object -ExpandProperty ProcessId -Unique
+  if ($byCmd -and $byCmd.Count -gt 0) { return $true }
+  # By window title
+  $byTitle = Get-Process -Name powershell -ErrorAction SilentlyContinue |
+    Where-Object { $_.Id -ne $myPid -and $_.MainWindowTitle -match "HyperlinksSpaceBot - (RAG|AI|BOT|FRONT)" } |
+    Select-Object -ExpandProperty Id -Unique
+  if ($byTitle -and $byTitle.Count -gt 0) { return $true }
+  return $false
+}
 
 function Get-ListeningPids($port) {
   try {
@@ -228,6 +244,10 @@ function Kill-ServiceWindows {
     Where-Object { $_.Id -ne $myPid -and $_.MainWindowTitle -match "HyperlinksSpaceBot - (RAG|AI|BOT|FRONT)" } |
     Select-Object -ExpandProperty Id -Unique
   Stop-PidsWithTree $byTitle "service window (by title)"
+}
+
+if ($CheckOnly) {
+  if (Test-ServiceTerminalsRunning) { exit 0 } else { exit 1 }
 }
 
 # First: close our service terminal windows and their full process trees (RAG/AI/BOT/FRONT)

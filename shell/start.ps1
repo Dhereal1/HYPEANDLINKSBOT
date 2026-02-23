@@ -103,61 +103,34 @@ function Wait-ForFrontendReady {
   param(
     [string]$BaseUrl,
     [int]$TimeoutSeconds = 120,
-    [int]$IntervalMilliseconds = 800,
-    [int]$MinMainDartJsBytes = 50000,
-    [int]$RootStableChecks = 3,
-    [int]$FallbackAfterSeconds = 20
+    [int]$IntervalMilliseconds = 1500,
+    [int]$CompilationDelaySeconds = 45
   )
 
+  # 1) Wait until root URL returns 200 (Flutter web-server is listening).
+  # 2) Then wait CompilationDelaySeconds so first compile can finish.
+  # 3) Then return true so caller opens the browser.
   $base = $BaseUrl.TrimEnd('/')
-  $startTime = Get-Date
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $firstRootOk = $null
   $supportsBasicParsing = (Get-Command Invoke-WebRequest).Parameters.ContainsKey("UseBasicParsing")
-  $stableRootHits = 0
   while ((Get-Date) -lt $deadline) {
     try {
-      $rootReqParams = @{
-        Uri = $base
-        TimeoutSec = 8
-      }
-      if ($supportsBasicParsing) {
-        $rootReqParams.UseBasicParsing = $true
-      }
+      $rootReqParams = @{ Uri = $base; TimeoutSec = 10 }
+      if ($supportsBasicParsing) { $rootReqParams.UseBasicParsing = $true }
       $rootResp = Invoke-WebRequest @rootReqParams
       if ($rootResp.StatusCode -ge 200 -and $rootResp.StatusCode -lt 400) {
-        $stableRootHits++
-
-        $assetReqParams = @{
-          Uri = "$base/main.dart.js"
-          TimeoutSec = 8
-        }
-        if ($supportsBasicParsing) {
-          $assetReqParams.UseBasicParsing = $true
-        }
-
-        try {
-          $assetResp = Invoke-WebRequest @assetReqParams
-          $contentLength = 0
-          if ($null -ne $assetResp.Content) {
-            $contentLength = $assetResp.Content.Length
-          }
-          if ($assetResp.StatusCode -ge 200 -and $assetResp.StatusCode -lt 400 -and $contentLength -ge $MinMainDartJsBytes) {
-            return $true
-          }
-        } catch {}
-
-        $elapsedSeconds = ((Get-Date) - $startTime).TotalSeconds
-        if ($stableRootHits -ge $RootStableChecks -and $elapsedSeconds -ge $FallbackAfterSeconds) {
-          # Fallback for flutter web-server mode where main.dart.js may be generated lazily.
+        if (-not $firstRootOk) { $firstRootOk = Get-Date }
+        $elapsed = ((Get-Date) - $firstRootOk).TotalSeconds
+        if ($elapsed -ge $CompilationDelaySeconds) {
           return $true
         }
       } else {
-        $stableRootHits = 0
+        $firstRootOk = $null
       }
     } catch {
-      $stableRootHits = 0
+      $firstRootOk = $null
     }
-
     Start-Sleep -Milliseconds $IntervalMilliseconds
   }
   return $false
@@ -793,8 +766,11 @@ if (-not $ragUp -or -not $aiUp -or -not $botApiUp -or -not $frontUp -or -not $ol
   }
 }
 
-if ($frontUp) {
+try {
   Start-Process "http://127.0.0.1:$frontendPort"
+  Write-Host "Browser opened: http://127.0.0.1:$frontendPort"
+} catch {
+  Write-Host "Could not open browser automatically. Open manually: http://127.0.0.1:$frontendPort" -ForegroundColor Yellow
 }
 
 Write-Host ""

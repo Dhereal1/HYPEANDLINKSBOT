@@ -50,18 +50,18 @@ class _MainPageState extends State<MainPage> {
 
   void _selectTabToRight() {
     final i = _tabOrder.indexOf(_selectedTab);
-    if (i >= 0 && i < _tabOrder.length - 1) {
-      setState(() => _selectedTab = _tabOrder[i + 1]);
-      AppHaptic.heavy();
-    }
+    if (i < 0) return;
+    final nextIndex = i == _tabOrder.length - 1 ? 0 : i + 1;
+    setState(() => _selectedTab = _tabOrder[nextIndex]);
+    AppHaptic.heavy();
   }
 
   void _selectTabToLeft() {
     final i = _tabOrder.indexOf(_selectedTab);
-    if (i > 0) {
-      setState(() => _selectedTab = _tabOrder[i - 1]);
-      AppHaptic.heavy();
-    }
+    if (i < 0) return;
+    final prevIndex = i == 0 ? _tabOrder.length - 1 : i - 1;
+    setState(() => _selectedTab = _tabOrder[prevIndex]);
+    AppHaptic.heavy();
   }
 
   // Mock coin data
@@ -1525,7 +1525,6 @@ class _MainPageState extends State<MainPage> {
                         final v = details.primaryVelocity ?? 0.0;
                         if (v > _swipeVelocityThreshold) {
                           _selectTabToLeft();
-                          AppHaptic.heavy();
                         }
                       },
                       child: const SizedBox.expand(),
@@ -1543,7 +1542,6 @@ class _MainPageState extends State<MainPage> {
                         final v = details.primaryVelocity ?? 0.0;
                         if (v < -_swipeVelocityThreshold) {
                           _selectTabToRight();
-                          AppHaptic.heavy();
                         }
                       },
                       child: const SizedBox.expand(),

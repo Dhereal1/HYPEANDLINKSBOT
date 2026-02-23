@@ -164,47 +164,61 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
                         top: 0,
                         left: 0,
                         right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              widget.titleLeft,
-                              style: const TextStyle(
-                                fontFamily: 'Aeroport Mono',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                color: Color(0xFF818181),
+                        child: SizedBox(
+                          height: 30,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Center(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    widget.titleLeft,
+                                    style: const TextStyle(
+                                      fontFamily: 'Aeroport Mono',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF818181),
+                                      height: 2.0,
+                                    ),
+                                    textHeightBehavior:
+                                        const TextHeightBehavior(
+                                      applyHeightToFirstAscent: false,
+                                      applyHeightToLastDescent: false,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  widget.titleRight,
-                                  style: const TextStyle(
-                                    fontFamily: 'Aeroport',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w400,
-                                    color: Color(0xFF818181),
-                                    height: 1.0,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    widget.titleRight,
+                                    style: const TextStyle(
+                                      fontFamily: 'Aeroport',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF818181),
+                                      height: 2.0,
+                                    ),
+                                    textHeightBehavior:
+                                        const TextHeightBehavior(
+                                      applyHeightToFirstAscent: false,
+                                      applyHeightToLastDescent: false,
+                                    ),
                                   ),
-                                  textHeightBehavior:
-                                      const TextHeightBehavior(
-                                    applyHeightToFirstAscent: false,
-                                    applyHeightToLastDescent: false,
+                                  const SizedBox(width: 5),
+                                  SvgPicture.asset(
+                                    'assets/icons/select.svg',
+                                    width: 5,
+                                    height: 10,
                                   ),
-                                ),
-                                const SizedBox(width: 5),
-                                SvgPicture.asset(
-                                  'assets/icons/select.svg',
-                                  width: 5,
-                                  height: 10,
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       Positioned.fill(

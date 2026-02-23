@@ -243,22 +243,34 @@ class _MainPageState extends State<MainPage> {
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
-                          // Hash row with icons - content part
+                          // Hash row with icons - content part (30px height to match CopyableDetailPage title row)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 15),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Text(
-                                  '..xk5str4e',
-                                  style: TextStyle(
-                                    fontFamily: 'Aeroport Mono',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w400,
-                                    color: Color(0xFF818181),
+                            child: SizedBox(
+                              height: 30,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Center(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        '..xk5str4e',
+                                        style: TextStyle(
+                                          fontFamily: 'Aeroport Mono',
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w400,
+                                          color: Color(0xFF818181),
+                                          height: 2.0,
+                                        ),
+                                        textHeightBehavior: TextHeightBehavior(
+                                          applyHeightToFirstAscent: false,
+                                          applyHeightToLastDescent: false,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -326,6 +338,7 @@ class _MainPageState extends State<MainPage> {
                               ],
                             ),
                           ),
+                        ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.center,

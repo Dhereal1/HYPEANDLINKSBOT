@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme/app_theme.dart';
+import 'pointer_region.dart';
 
 enum WalletPanelState {
   noWallet,
@@ -205,7 +206,7 @@ class WalletPanel extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: child,
-      );
+      ).pointer;
     }
     return child;
   }

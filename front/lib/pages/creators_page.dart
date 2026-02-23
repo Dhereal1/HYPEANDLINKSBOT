@@ -4,6 +4,7 @@ import '../telegram_safe_area.dart';
 import '../utils/app_haptic.dart';
 import '../utils/open_url.dart';
 import '../widgets/common/edge_swipe_back.dart';
+import '../widgets/common/pointer_region.dart';
 import '../widgets/global/global_logo_bar.dart';
 import 'a_page_example.dart';
 import 'wallet_panel_page.dart';
@@ -133,6 +134,6 @@ class _LinkTile extends StatelessWidget {
           decorationColor: AppTheme.textColor,
         ),
       ),
-    );
+    ).pointer;
   }
 }

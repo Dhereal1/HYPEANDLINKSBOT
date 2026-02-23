@@ -6,6 +6,7 @@ import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
 import '../../app/theme/app_theme.dart';
 import '../../widgets/global/global_logo_bar.dart';
 import '../../widgets/common/edge_swipe_back.dart';
+import '../../widgets/common/pointer_region.dart';
 import '../../app/app.dart';
 import '../../telegram_safe_area.dart';
 import '../../utils/app_haptic.dart';
@@ -216,7 +217,7 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
                                 behavior: HitTestBehavior.opaque,
                                 onTap: _onTap,
                                 child: widget.centerChildBuilder(),
-                              ),
+                              ).pointer,
                               const SizedBox(height: 20),
                               GestureDetector(
                                 onTap: _onTap,
@@ -237,7 +238,7 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
                                         )
                                       : const SizedBox.shrink(),
                                 ),
-                              ),
+                              ).pointer,
                             ],
                           ),
                         ),

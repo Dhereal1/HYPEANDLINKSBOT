@@ -9,6 +9,7 @@ import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
 import '../app/theme/app_theme.dart';
 import '../widgets/global/global_logo_bar.dart';
 import '../widgets/common/edge_swipe_back.dart';
+import '../widgets/common/pointer_region.dart';
 import '../widgets/common/diagonal_line_painter.dart';
 import '../telegram_safe_area.dart';
 import '../telegram_webapp.dart';
@@ -259,7 +260,7 @@ class _SwapPageState extends State<SwapPage> {
           ),
         ),
       ),
-    );
+    ).pointer;
   }
 
   void _setResolutionByKey(String key) {

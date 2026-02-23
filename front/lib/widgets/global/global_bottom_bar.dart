@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../app/theme/app_theme.dart';
+import '../common/pointer_region.dart';
 import '../../app/app.dart';
 import '../../pages/ai_page.dart';
 import '../../utils/app_haptic.dart';
@@ -325,7 +326,7 @@ class _GlobalBottomBarState extends State<GlobalBottomBar> {
                                 width: 15,
                                 height: 10,
                               ),
-                            ),
+                            ).pointer,
                           ),
                         ],
                       ),

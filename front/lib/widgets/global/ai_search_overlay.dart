@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_telegram_miniapp/flutter_telegram_miniapp.dart' as tma;
 import '../../app/app.dart';
+import '../common/pointer_region.dart';
 import '../../app/theme/app_theme.dart';
 import '../../utils/keyboard_height_service.dart';
 import '../../utils/app_haptic.dart';
@@ -170,7 +171,7 @@ class _AiSearchOverlayState extends State<AiSearchOverlay> {
                                                 color: AppTheme.textColor,
                                               ),
                                             ),
-                                          ),
+                                          ).pointer,
                                         )),
                                   ],
                                 ),

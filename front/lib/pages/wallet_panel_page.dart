@@ -3,6 +3,7 @@ import '../app/theme/app_theme.dart';
 import '../telegram_safe_area.dart';
 import '../utils/app_haptic.dart';
 import '../widgets/common/edge_swipe_back.dart';
+import '../widgets/common/pointer_region.dart';
 import '../widgets/common/wallet_panel.dart';
 import '../widgets/global/global_logo_bar.dart';
 
@@ -144,7 +145,7 @@ class _WalletPanelPageState extends State<WalletPanelPage> {
                                   ),
                                 ),
                               ),
-                            ),
+                            ).pointer,
                           );
                         }).toList(),
                       ),

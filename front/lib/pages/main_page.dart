@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../app/theme/app_theme.dart';
 import '../widgets/global/global_logo_bar.dart';
+import '../widgets/common/pointer_region.dart';
 import '../telegram_safe_area.dart';
 import '../utils/app_haptic.dart';
 import 'swap_page.dart';
@@ -297,7 +298,7 @@ class _MainPageState extends State<MainPage> {
                                         width: 30,
                                         height: 30,
                                       ),
-                                    ),
+                                    ).pointer,
                                     const SizedBox(width: 15),
                                     GestureDetector(
                                       onTap: () {
@@ -382,7 +383,7 @@ class _MainPageState extends State<MainPage> {
                                         width: 5, height: 10),
                                   ],
                                 ),
-                              ),
+                              ).pointer,
                             ],
                           ),
                           const SizedBox(height: 30),
@@ -439,7 +440,7 @@ class _MainPageState extends State<MainPage> {
                                       ),
                                     ],
                                   ),
-                                ),
+                                ).pointer,
                               ),
                               Expanded(
                                 child: GestureDetector(
@@ -493,7 +494,7 @@ class _MainPageState extends State<MainPage> {
                                       ),
                                     ],
                                   ),
-                                ),
+                                ).pointer,
                               ),
                               Expanded(
                                 child: GestureDetector(
@@ -546,7 +547,7 @@ class _MainPageState extends State<MainPage> {
                                       ),
                                     ],
                                   ),
-                                ),
+                                ).pointer,
                               ),
                               Expanded(
                                 child: GestureDetector(
@@ -600,7 +601,7 @@ class _MainPageState extends State<MainPage> {
                                       ),
                                     ],
                                   ),
-                                ),
+                                ).pointer,
                               ),
                               Expanded(
                                 child: GestureDetector(
@@ -654,7 +655,7 @@ class _MainPageState extends State<MainPage> {
                                       ),
                                     ],
                                   ),
-                                ),
+                                ).pointer,
                               ),
                             ],
                           ),
@@ -663,15 +664,15 @@ class _MainPageState extends State<MainPage> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedTab = 'Feed';
-                                    });
-                                    AppHaptic.heavy();
-                                  },
-                                  child: Text(
-                                    'Feed',
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  setState(() {
+                                    _selectedTab = 'Feed';
+                                  });
+                                  AppHaptic.heavy();
+                                },
+                                child: Text(
+                                  'Feed',
                                   style: TextStyle(
                                     fontFamily: 'Aeroport',
                                     fontSize: 20,
@@ -681,7 +682,7 @@ class _MainPageState extends State<MainPage> {
                                         : const Color(0xFF818181),
                                   ),
                                 ),
-                              ),
+                              ).pointer,
                               const SizedBox(width: 15),
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
@@ -702,7 +703,7 @@ class _MainPageState extends State<MainPage> {
                                         : const Color(0xFF818181),
                                   ),
                                 ),
-                              ),
+                              ).pointer,
                               const SizedBox(width: 15),
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
@@ -723,7 +724,7 @@ class _MainPageState extends State<MainPage> {
                                         : const Color(0xFF818181),
                                   ),
                                 ),
-                              ),
+                              ).pointer,
                               const SizedBox(width: 15),
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
@@ -744,7 +745,7 @@ class _MainPageState extends State<MainPage> {
                                         : const Color(0xFF818181),
                                   ),
                                 ),
-                              ),
+                              ).pointer,
                               const SizedBox(width: 15),
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
@@ -765,7 +766,7 @@ class _MainPageState extends State<MainPage> {
                                         : const Color(0xFF818181),
                                   ),
                                 ),
-                              ),
+                              ).pointer,
                             ],
                           ),
                           const SizedBox(height: 20),
@@ -943,7 +944,7 @@ class _MainPageState extends State<MainPage> {
                                           child: row,
                                         ),
                                       ),
-                                    ),
+                                    ).pointer,
                                   );
                                 }
                                 return cell;

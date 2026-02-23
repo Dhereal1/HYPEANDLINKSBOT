@@ -13,8 +13,11 @@ class MnemonicsPage extends StatefulWidget {
 }
 
 class _MnemonicsPageState extends State<MnemonicsPage> {
+  static const String _loadingText = 'Loading...';
   static const String _missingMnemonicText =
       'No mnemonic found on this device.';
+  static const String _loadErrorText =
+      'Could not load wallet data. Please try again.';
   late final Future<String> _mnemonicTextFuture;
 
   @override
@@ -24,11 +27,15 @@ class _MnemonicsPageState extends State<MnemonicsPage> {
   }
 
   Future<String> _loadMnemonicText() async {
-    final wallet = await WalletServiceImpl().getExisting();
-    if (wallet == null || wallet.mnemonicWords.isEmpty) {
-      return _missingMnemonicText;
+    try {
+      final wallet = await WalletServiceImpl().getExisting();
+      if (wallet == null || wallet.mnemonicWords.isEmpty) {
+        return _missingMnemonicText;
+      }
+      return _formatMnemonic(wallet.mnemonicWords);
+    } catch (_) {
+      return _loadErrorText;
     }
-    return _formatMnemonic(wallet.mnemonicWords);
   }
 
   String _formatMnemonic(List<String> words) {
@@ -47,9 +54,14 @@ class _MnemonicsPageState extends State<MnemonicsPage> {
     return FutureBuilder<String>(
       future: _mnemonicTextFuture,
       builder: (context, snapshot) {
-        final text = snapshot.data ?? 'Loading...';
+        final String text = snapshot.data ?? _loadingText;
+        final bool canCopyText =
+            snapshot.connectionState == ConnectionState.done &&
+                snapshot.hasData &&
+                text != _missingMnemonicText &&
+                text != _loadErrorText;
         return CopyableDetailPage(
-          copyText: text,
+          copyText: canCopyText ? text : '',
           onTitleRightTap: () {
             Navigator.push(
               context,

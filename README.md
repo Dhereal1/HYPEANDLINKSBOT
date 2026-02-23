@@ -104,8 +104,6 @@ Set env vars per service in remote deploy as follows.
 - If `LLM_PROVIDER=openai`: `OPENAI_API_KEY` (required), `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
 - If `LLM_PROVIDER=ollama`: `OLLAMA_URL`, `OLLAMA_MODEL`
 - If `LLM_PROVIDER=cocoon`: `COCOON_CLIENT_URL` (default `http://127.0.0.1:10000`), `COCOON_MODEL` (optional)
-- Optional wallet repo selector: `WALLET_REPO=memory|postgres` (default `memory`)
-- If `WALLET_REPO=postgres`: set `DATABASE_URL` (current Postgres repo is stubbed; runtime still falls back to memory)
 - Optional compatibility alias: `API_KEY`
 - Optional: platform `PORT`
 

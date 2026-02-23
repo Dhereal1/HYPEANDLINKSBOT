@@ -17,7 +17,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from prompt_i18n import localize_prompt_with_model
 from wallet.repo import InMemoryWalletRepository
-from wallet.repo_postgres import PostgresConfig, PostgresWalletRepository
 from wallet.service import WalletService, serialize_wallet_machine
 
 logger = logging.getLogger(__name__)
@@ -58,8 +57,6 @@ COCOON_MODEL = os.getenv("COCOON_MODEL", "default")
 RAG_URL = _normalize_url(os.getenv("RAG_URL", ""), "http://127.0.0.1:8001")
 RESPONSE_FORMAT_VERSION = "facts_analysis_v2"
 INNER_CALLS_KEY = (os.getenv("INNER_CALLS_KEY") or os.getenv("API_KEY") or "").strip()
-WALLET_REPO = (os.getenv("WALLET_REPO") or "memory").strip().lower()
-DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 
 
 def _mask_secret(value: str, visible: int = 4) -> str:
@@ -1151,16 +1148,6 @@ async def capabilities():
 
 
 _wallet_repo = InMemoryWalletRepository()
-if WALLET_REPO == "postgres":
-    # Keep runtime non-breaking while Postgres repository is a stub.
-    if not DATABASE_URL:
-        logger.warning("[WALLET] WALLET_REPO=postgres set without DATABASE_URL; falling back to memory")
-    else:
-        _ = PostgresConfig(database_url=DATABASE_URL)
-        _ = PostgresWalletRepository
-        logger.warning("[WALLET] WALLET_REPO=postgres requested, but repository is stubbed; falling back to memory")
-elif WALLET_REPO != "memory":
-    logger.warning("[WALLET] unknown WALLET_REPO=%s; falling back to memory", WALLET_REPO)
 _wallet_service = WalletService(repo=_wallet_repo)
 
 

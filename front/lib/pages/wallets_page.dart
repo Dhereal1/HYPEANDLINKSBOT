@@ -48,26 +48,28 @@ class WalletsPage extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
-                      height: 20,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          '1 wallet',
-                          style: TextStyle(
-                            fontFamily: 'Aeroport',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
-                            color: const Color(0xFF818181),
-                            height: 20,
-                          ),
-                          textHeightBehavior: const TextHeightBehavior(
-                            applyHeightToFirstAscent: false,
-                            applyHeightToLastDescent: false,
+                      height: 30,
+                      child: Center(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '1 wallet',
+                            style: const TextStyle(
+                              fontFamily: 'Aeroport',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF818181),
+                              height: 2.0,
+                            ),
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 15),
                     SizedBox(
                       height: 30,
                       child: Align(

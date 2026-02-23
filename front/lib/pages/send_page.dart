@@ -159,45 +159,56 @@ class _SendPageState extends State<SendPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                        // First content row with two blocks
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // First block: ..xk5str4e
-                            const Text(
-                              '..xk5str4e',
-                              style: TextStyle(
-                                fontFamily: 'Aeroport Mono',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                color: Color(0xFF818181),
-                              ),
-                            ),
-                            // Second block: Sendal Rodriges with icon
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Text(
-                                  'Sendal Rodriges',
-                                  style: TextStyle(
-                                    fontFamily: 'Aeroport',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w400,
-                                    color: Color(0xFF818181),
-                                    height: 1.0,
-                                  ),
-                                  textHeightBehavior: TextHeightBehavior(
-                                    applyHeightToFirstAscent: false,
-                                    applyHeightToLastDescent: false,
+                        // First content row (30px height to match main/CopyableDetailPage title row)
+                        SizedBox(
+                          height: 30,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Center(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '..xk5str4e',
+                                    style: TextStyle(
+                                      fontFamily: 'Aeroport Mono',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF818181),
+                                      height: 2.0,
+                                    ),
+                                    textHeightBehavior: TextHeightBehavior(
+                                      applyHeightToFirstAscent: false,
+                                      applyHeightToLastDescent: false,
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 5),
-                                SvgPicture.asset('assets/icons/select.svg', width: 5, height: 10),
-                              ],
-                            ),
-                          ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Sendal Rodriges',
+                                    style: TextStyle(
+                                      fontFamily: 'Aeroport',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF818181),
+                                      height: 2.0,
+                                    ),
+                                    textHeightBehavior: TextHeightBehavior(
+                                      applyHeightToFirstAscent: false,
+                                      applyHeightToLastDescent: false,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  SvgPicture.asset('assets/icons/select.svg', width: 5, height: 10),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 20),
                         // Second content row with Send headline and coin block

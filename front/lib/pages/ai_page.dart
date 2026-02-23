@@ -271,13 +271,15 @@ class _AiPageState extends State<AiPage> {
                         separatorBuilder: (_, __) => const SizedBox(height: 30),
                         itemBuilder: (context, index) {
                           if (index == entries.length) {
-                            final bottomBarHeight =
-                                GlobalBottomBar.getBottomBarHeight(context);
-                            final dynamicSpacer = constraints.maxHeight +
-                                bottomBarHeight +
-                                30.0 +
-                                _latestEntryHeight;
-                            return SizedBox(height: dynamicSpacer);
+                            // Only enough space so the latest entry can be pinned to top
+                            // with no extra scrollable empty area below.
+                            final spacerHeight = _latestEntryHeight > 0
+                                ? (constraints.maxHeight -
+                                        _latestEntryHeight -
+                                        30.0)
+                                    .clamp(0.0, double.infinity)
+                                : 0.0;
+                            return SizedBox(height: spacerHeight);
                           }
                           final entry = entries[index];
                           final itemKey =

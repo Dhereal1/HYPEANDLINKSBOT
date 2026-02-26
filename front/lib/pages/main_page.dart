@@ -79,6 +79,13 @@ class _MainPageState extends State<MainPage> {
   List<Map<String, dynamic>> get _feedItems {
     return [
       {
+        'icon': 'assets/sample/mak/3.svg',
+        'primaryText': 'Wallet created',
+        'secondaryText': "Press to save 24 words",
+        'timestamp': '7:55',
+        'rightText': null,
+      },
+      {
         'icon': 'assets/sample/mak/Creator.svg',
         'primaryText': 'You are a creator',
         'secondaryText': "Press to access a creators page",
@@ -94,24 +101,17 @@ class _MainPageState extends State<MainPage> {
         'rightText': '+1 DLLR',
       },
       {
-        'icon': 'assets/sample/mak/3.svg',
-        'primaryText': 'Robat',
-        'secondaryText': "Welcome! I’ve created a wallet for you.",
-        'timestamp': '7:55',
-        'rightText': null,
+        'icon': 'assets/sample/mak/1.svg',
+        'primaryText': 'CLATH 41 NFT recieved',
+        'secondaryText': 'AI CLATH Collection',
+        'timestamp': '15:22',
+        'rightText': 'N/A',
       },
       {
         'icon': r'assets/sample/mak/+1$.svg',
         'primaryText': 'Incoming task',
         'secondaryText': 'Send link with 1\$ and get +1\$',
         'timestamp': '17:11',
-        'rightText': 'N/A',
-      },
-      {
-        'icon': 'assets/sample/mak/1.svg',
-        'primaryText': 'CLATH 41 NFT recieved',
-        'secondaryText': 'AI CLATH Collection',
-        'timestamp': '15:22',
         'rightText': 'N/A',
       },
     ];
@@ -135,8 +135,8 @@ class _MainPageState extends State<MainPage> {
     return [
       {
         'icon': 'assets/sample/mak/3.svg',
-        'primaryText': 'Robat',
-        'secondaryText': "Welcome! I've created a wallet for you.",
+        'primaryText': 'Wallet created',
+        'secondaryText': "Press to save 24 words",
         'timestamp': '7:55',
         'rightText': null,
       },

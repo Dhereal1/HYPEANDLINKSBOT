@@ -1,74 +1,98 @@
 ## PR Title
 
-`chore(unified): scaffold modular unified service with forward-only defaults and test wiring`
+`feat(bot): add Vercel JS webhook gateway with Televerse forwarding skeleton`
 
 ## Summary
 
-This PR creates the first real `services/unified` skeleton as a safe, mergeable foundation for incremental architecture work.
+This PR adds a production-safe Telegram webhook gateway in `front/api/bot.js` and isolates bot logic into `front/bot-service/*`.
+The gateway handles core commands locally (`/start`, `/help`, `/ping`), applies strict webhook safety checks, and can optionally forward sanitized updates to a Televerse (Dart) downstream service.
 
-- No runtime cutover.
-- No behavior migration.
-- Existing services remain source of truth via forwarding.
-- Default mode is forward; unified is not used in prod yet.
+## Confirmed Direction
 
-## Why
+- JS webhook receiver on Vercel (thin entrypoint)
+- Televerse service handles richer logic downstream
+- Gateway remains reliable even when AI/downstream are unavailable
 
-We need a single-root modular structure ready for growth (auth, ai, rag, wallet, tasks, feed) without introducing deployment risk.
+## Gateway Contract
 
-## What Changed
+- `GET /api/bot`
+  - Health/status for gateway wiring.
+- `POST /api/bot`
+  - Verifies `X-Telegram-Bot-Api-Secret-Token` (when configured).
+  - Rejects oversized payloads.
+  - Validates parsed JSON update.
+  - Responds `200 { ok: true }` immediately after validation (antifragile ACK behavior).
+  - Processes update best-effort asynchronously.
 
-### New unified service scaffold
+## Core Behavior
 
-- Added `services/unified` service package with:
-  - `app/main.py` (FastAPI entrypoint)
-  - `app/config.py` (env-driven global + per-route modes)
-  - `app/health.py` (`/health` payload + route mode visibility)
-  - `app/api/routers/` for `auth`, `ai`, `rag`
-  - `app/forwarding/` for legacy upstream calls
-  - `app/modules/` placeholders for `auth`, `ai`, `rag`, `wallet`, `tasks`, `feed`
-  - `app/observability/` and `app/shared/` placeholders
+- `/start`
+  - Uses bounded AI health probe:
+    - `AI_HEALTH_TIMEOUT_MS` default `1200`
+    - clamped to `200..1500`
+    - cached for short TTL (`AI_HEALTH_CACHE_TTL_MS`, default `30000`)
+  - AI up => welcome suggests prompts
+  - AI down => safe welcome without prompt suggestion
+- `/help` and `/ping` handled locally in gateway
+- Non-core text messages optionally forwarded to Televerse via internal endpoint
 
-### Forward-only behavior (default)
+## Security and Reliability
 
-- `UNIFIED_MODE=forward` by default.
-- Added route-level mode vars (`UNIFIED_AUTH_MODE`, `UNIFIED_AI_MODE`, `UNIFIED_RAG_MODE`, etc.) inheriting from `UNIFIED_MODE`.
-- Live routes currently forward to legacy services:
-  - `POST /auth/telegram` -> bot
-  - `POST /ai/chat` and `POST /api/chat` -> ai backend
-  - `POST /rag/query` and `POST /query` -> rag backend
+- Secret-token verification (`401` on mismatch)
+- Payload size limit (`TELEGRAM_BODY_LIMIT_BYTES`, default `262144`)
+- Structured sanitized logs (`telegram_webhook_error`, `update_id`, `chat_id`, `update_kind`)
+- No raw payload logging in error path
 
-### Operational files
+## Televerse Forwarding Contract (Skeleton)
 
-- Added `Dockerfile`, `railway.json`, `requirements.txt`, `scripts/run_local.sh`, and updated `README.md`.
+Gateway forwards a reduced envelope to:
+- `POST {TELEVERSE_BASE_URL}/internal/process-update`
+- Header: `X-Internal-Key: {TELEVERSE_INTERNAL_KEY}`
 
-### Tests
+Envelope shape:
 
-- Added `services/unified/tests/test_health.py`
-- Added `services/unified/tests/test_forwarding.py`
-- Added CI workflow `.github/workflows/unified-tests.yml` to run `pytest` for `services/unified`
-
-## Risk / Safety
-
-- Low risk: scaffold-only PR with forward defaults.
-- No legacy code moved or deleted.
-- No API contract changes on live forwarded endpoints.
-
-## Verification
-
-Local (inside `services/unified`):
-
-```bash
-pip install -r requirements.txt
-pytest -q
+```json
+{
+  "update_id": 123,
+  "chat_id": 1,
+  "user_id": 2,
+  "text": "hi",
+  "message_id": 10,
+  "is_command": false,
+  "command": null,
+  "timestamp": 1700000000
+}
 ```
 
-CI:
+## Files Added
 
-- `Unified Service Tests` workflow runs on push/PR and executes `pytest` for `services/unified`.
-- CI validates the scaffold test harness even when local environments do not have `pytest` installed.
+- `front/api/bot.js`
+- `front/bot-service/config.js`
+- `front/bot-service/logger.js`
+- `front/bot-service/text.js`
+- `front/bot-service/ai-health.js`
+- `front/bot-service/telegram.js`
+- `front/bot-service/downstream.js`
+- `front/bot-service/router.js`
+- `front/scripts/set-telegram-webhook.mjs`
+- `front/scripts/delete-telegram-webhook.mjs`
 
-## Follow-ups (Not in this PR)
+## Files Updated
 
-1. Add wallet/tasks/feed routers with forward stubs.
-2. Introduce `shadow` mode diff logging.
-3. Migrate one bounded context at a time (starting with wallet/auth policy).
+- `front/vercel.json`
+- `front/README.md`
+
+## Manual Smoke Checklist
+
+1. Set env vars (`BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, optional AI/Televerse vars).
+2. Deploy front to Vercel.
+3. Run `node front/scripts/set-telegram-webhook.mjs` with `TELEGRAM_WEBHOOK_URL=https://<domain>/api/bot`.
+4. Send `/start` with healthy AI endpoint => prompt suggestion appears.
+5. Break `AI_HEALTH_URL` => `/start` safe fallback without prompt suggestion.
+6. Send wrong secret header => `401`.
+7. Send malformed/oversized request => rejection path works.
+
+## Notes
+
+- This PR intentionally follows the existing `front/api/*.js` Vercel style for fast merge and single-root deployment.
+- `apps/bot` prototype is not part of this PR scope.

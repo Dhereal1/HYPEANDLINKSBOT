@@ -1,103 +1,72 @@
+## PR Title
+
+`chore(unified): scaffold modular unified service with forward-only defaults and test wiring`
+
 ## Summary
 
-This PR prepares the stack for shipping with env-driven LLM routing, clean service boundaries, and Railway deployment guidance.
+This PR creates the first real `services/unified` skeleton as a safe, mergeable foundation for incremental architecture work.
 
-### Included changes
+- No runtime cutover.
+- No behavior migration.
+- Existing services remain source of truth via forwarding.
 
-- AI backend:
-  - Added env-based LLM routing (`LLM_PROVIDER`) with Ollama default and optional OpenAI fallback.
-  - Removed hardcoded model path; model/provider selected from env in one place.
-- Bot:
-  - Kept bot as thin transport layer to AI backend (`/api/chat` + `X-API-Key`).
-  - Removed ticker-specific local prompt branching.
-- Deploy/docs:
-  - Added copy/paste env examples and Railway 3-service deployment docs.
-  - Added smoke test scripts and env templates.
+## Why
 
-## Railway Deploy Order
+We need a single-root modular structure ready for growth (auth, ai, rag, wallet, tasks, feed) without introducing deployment risk.
 
-1. **RAG** (FastAPI)
-2. **AI backend** (FastAPI)
-3. **Bot** (worker)
+## What Changed
 
-## Required Env Vars Per Service
+### New unified service scaffold
 
-### Service A: RAG
+- Added `services/unified` service package with:
+  - `app/main.py` (FastAPI entrypoint)
+  - `app/config.py` (env-driven global + per-route modes)
+  - `app/health.py` (`/health` payload + route mode visibility)
+  - `app/api/routers/` for `auth`, `ai`, `rag`
+  - `app/forwarding/` for legacy upstream calls
+  - `app/modules/` placeholders for `auth`, `ai`, `rag`, `wallet`, `tasks`, `feed`
+  - `app/observability/` and `app/shared/` placeholders
 
-```env
-INNER_CALLS_KEY=change-me-shared-secret
-# optional: COFFEE_KEY
-```
+### Forward-only behavior (default)
 
-Start command:
+- `UNIFIED_MODE=forward` by default.
+- Added route-level mode vars (`UNIFIED_AUTH_MODE`, `UNIFIED_AI_MODE`, `UNIFIED_RAG_MODE`, etc.) inheriting from `UNIFIED_MODE`.
+- Live routes currently forward to legacy services:
+  - `POST /auth/telegram` -> bot
+  - `POST /ai/chat` and `POST /api/chat` -> ai backend
+  - `POST /rag/query` and `POST /query` -> rag backend
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
+### Operational files
 
-### Service B: AI backend
+- Added `Dockerfile`, `railway.json`, `requirements.txt`, `scripts/run_local.sh`, and updated `README.md`.
 
-```env
-INNER_CALLS_KEY=change-me-shared-secret
-RAG_URL=https://<rag-domain>
-LLM_PROVIDER=ollama
-OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5:1.5b
-# optional:
-# OPENAI_API_KEY=
-# OPENAI_MODEL=gpt-4o-mini
-```
+### Tests
 
-Start command:
+- Added `services/unified/tests/test_health.py`
+- Added `services/unified/tests/test_forwarding.py`
+- Added CI workflow `.github/workflows/unified-tests.yml` to run `pytest` for `services/unified`
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
+## Risk / Safety
 
-### Service C: Bot
+- Low risk: scaffold-only PR with forward defaults.
+- No legacy code moved or deleted.
+- No API contract changes on live forwarded endpoints.
 
-```env
-BOT_TOKEN=123456:telegram-token
-DATABASE_URL=postgresql://user:pass@host:5432/db
-AI_BACKEND_URL=https://<ai-domain>
-API_KEY=change-me-shared-secret
-# optional: APP_URL
-```
+## Verification
 
-Start command:
+Local (inside `services/unified`):
 
 ```bash
-python bot.py
+pip install -r requirements.txt
+pytest -q
 ```
 
-## How To Smoke Test
+CI:
 
-### Telegram checks
+- `Unified Service Tests` workflow runs on push/PR and executes `pytest` for `services/unified`.
 
-Send:
+## Follow-ups (Not in this PR)
 
-1. `$DOGS`
-2. `что такое DOGS?`
-3. `$TON`
-
-Confirm:
-
-- RAG receives `/tokens/{symbol}` and returns `200` for valid symbols.
-- AI backend does not log `RAG verification failed` for those requests.
-- Bot replies cleanly.
-
-### Scripted checks
-
-Bash:
-
-```bash
-export API_KEY=...
-./smoke.sh
-```
-
-PowerShell:
-
-```powershell
-$env:API_KEY="..."
-.\shell\smoke.ps1
-```
+1. Add wallet/tasks/feed routers with forward stubs.
+2. Introduce `shadow` mode diff logging.
+3. Migrate one bounded context at a time (starting with wallet/auth policy).

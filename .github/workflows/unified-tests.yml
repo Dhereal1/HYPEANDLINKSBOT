@@ -1,0 +1,32 @@
+name: Unified Service Tests
+
+on:
+  push:
+    paths:
+      - "services/unified/**"
+      - ".github/workflows/unified-tests.yml"
+  pull_request:
+    paths:
+      - "services/unified/**"
+      - ".github/workflows/unified-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/unified
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q

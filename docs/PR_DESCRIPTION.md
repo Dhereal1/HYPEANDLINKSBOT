@@ -9,6 +9,7 @@ This PR creates the first real `services/unified` skeleton as a safe, mergeable 
 - No runtime cutover.
 - No behavior migration.
 - Existing services remain source of truth via forwarding.
+- Default mode is forward; unified is not used in prod yet.
 
 ## Why
 
@@ -64,6 +65,7 @@ pytest -q
 CI:
 
 - `Unified Service Tests` workflow runs on push/PR and executes `pytest` for `services/unified`.
+- CI validates the scaffold test harness even when local environments do not have `pytest` installed.
 
 ## Follow-ups (Not in this PR)
 

@@ -1,1 +1,1 @@
-# Unified service package marker.
+"""Unified service package."""

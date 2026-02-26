@@ -204,7 +204,7 @@ This repo also includes a thin Telegram webhook receiver under `front/api/bot.js
 - Endpoint: `POST /api/bot`
 - Local commands: `/start`, `/help`, `/ping`
 - Antifragile `/start`: checks `AI_HEALTH_URL` with bounded timeout and falls back safely when AI is unavailable
-- Optional forwarding to Televerse service (`TELEVERSE_BASE_URL`) via internal key
+- grammY webhook runs in this same Vercel function (`/api/bot`) for single-host deploy mode
 
 Supporting logic lives in `front/bot-service/*` for clean discoverability.
 
@@ -216,7 +216,6 @@ Supporting logic lives in `front/bot-service/*` for clean discoverability.
 - `AI_HEALTH_TIMEOUT_MS` - default `1200`, clamped to `200..1500`
 - `AI_HEALTH_CACHE_TTL_MS` - default `30000`
 - `TELEGRAM_BODY_LIMIT_BYTES` - default `262144`
-- `TELEVERSE_BASE_URL` + `TELEVERSE_INTERNAL_KEY` - optional downstream forwarding
 - `APP_URL` - optional mini app button for `/start`
 
 ### Webhook Scripts
@@ -228,3 +227,6 @@ node scripts/delete-telegram-webhook.mjs
 
 Expected `TELEGRAM_WEBHOOK_URL` example:
 - `https://<your-vercel-domain>/api/bot`
+
+Future option:
+- If you later run Televerse on a separate host, this gateway can be extended to forward reduced update envelopes. Not part of current default runtime path.

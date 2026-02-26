@@ -1,74 +1,70 @@
 ## PR Title
 
-`chore(unified): scaffold modular unified service with forward-only defaults and test wiring`
+`feat(bot): add antifragile Telegram webhook service with bounded AI fallback and safe structured logging`
 
 ## Summary
 
-This PR creates the first real `services/unified` skeleton as a safe, mergeable foundation for incremental architecture work.
+This PR adds an isolated Telegram bot service in `apps/bot` using Next.js + grammY.
+It is designed as an antifragile webhook entrypoint: secure request validation, bounded AI dependency checks, and safe fallback behavior when AI is unavailable.
 
-- No runtime cutover.
-- No behavior migration.
-- Existing services remain source of truth via forwarding.
-- Default mode is forward; unified is not used in prod yet.
+## Endpoint Contract
 
-## Why
+- `GET /api/health`
+  - Returns service status and key configuration signals.
+- `GET /api/telegram/webhook`
+  - Lightweight endpoint status check.
+- `POST /api/telegram/webhook`
+  - Validates `X-Telegram-Bot-Api-Secret-Token` when configured.
+  - Returns `401` on secret mismatch.
+  - Returns `400` for malformed JSON.
+  - Processes Telegram updates via cached singleton bot instance.
 
-We need a single-root modular structure ready for growth (auth, ai, rag, wallet, tasks, feed) without introducing deployment risk.
+## Reliability And Security Guarantees
 
-## What Changed
+- AI health probe timeout is hard-bounded:
+  - default `1200ms`
+  - clamped to `200..1500ms`
+  - invalid/missing values fail closed safely
+- `/start` behavior is antifragile:
+  - AI reachable => welcome includes prompt suggestion
+  - AI unavailable => safe welcome without prompt suggestion
+- Structured sanitized error logging in webhook route:
+  - event: `telegram_webhook_error`
+  - fields: `update_id`, `chat_id`, `update_kind`, `{ name, message }`
+  - no raw payload logging
+- Webhook security via secret token verification (`401` on mismatch)
 
-### New unified service scaffold
+## Deployment Model (`apps/bot`) + Portability Note
 
-- Added `services/unified` service package with:
-  - `app/main.py` (FastAPI entrypoint)
-  - `app/config.py` (env-driven global + per-route modes)
-  - `app/health.py` (`/health` payload + route mode visibility)
-  - `app/api/routers/` for `auth`, `ai`, `rag`
-  - `app/forwarding/` for legacy upstream calls
-  - `app/modules/` placeholders for `auth`, `ai`, `rag`, `wallet`, `tasks`, `feed`
-  - `app/observability/` and `app/shared/` placeholders
+- Primary deployment target is a separate Vercel project rooted at `apps/bot`.
+- This isolation keeps bot-service ownership clean and avoids coupling with existing frontend delivery.
+- If team preference is single-project deployment under `front/api`, webhook logic is portable 1:1 with no product/API behavior changes required.
 
-### Forward-only behavior (default)
+## Manual Smoke Checklist
 
-- `UNIFIED_MODE=forward` by default.
-- Added route-level mode vars (`UNIFIED_AUTH_MODE`, `UNIFIED_AI_MODE`, `UNIFIED_RAG_MODE`, etc.) inheriting from `UNIFIED_MODE`.
-- Live routes currently forward to legacy services:
-  - `POST /auth/telegram` -> bot
-  - `POST /ai/chat` and `POST /api/chat` -> ai backend
-  - `POST /rag/query` and `POST /query` -> rag backend
+1. Set env vars and deploy `apps/bot`.
+2. Run `npm run set:webhook` with production values.
+3. Send `/start` with healthy AI endpoint -> prompt suggestion appears.
+4. Set `AI_HEALTH_URL` to invalid target -> `/start` returns safe welcome without prompt suggestion.
+5. Send webhook with wrong secret header -> `401`.
+6. Send malformed JSON -> `400`.
 
-### Operational files
+## Public Interfaces / Contracts (Unchanged)
 
-- Added `Dockerfile`, `railway.json`, `requirements.txt`, `scripts/run_local.sh`, and updated `README.md`.
+- `GET /api/health`
+- `GET /api/telegram/webhook`
+- `POST /api/telegram/webhook`
 
-### Tests
+Environment variables:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `AI_HEALTH_URL`
+- `AI_HEALTH_TIMEOUT_MS` (bounded)
+- `TELEGRAM_WEBHOOK_URL`
 
-- Added `services/unified/tests/test_health.py`
-- Added `services/unified/tests/test_forwarding.py`
-- Added CI workflow `.github/workflows/unified-tests.yml` to run `pytest` for `services/unified`
+## Assumptions And Defaults
 
-## Risk / Safety
-
-- Low risk: scaffold-only PR with forward defaults.
-- No legacy code moved or deleted.
-- No API contract changes on live forwarded endpoints.
-
-## Verification
-
-Local (inside `services/unified`):
-
-```bash
-pip install -r requirements.txt
-pytest -q
-```
-
-CI:
-
-- `Unified Service Tests` workflow runs on push/PR and executes `pytest` for `services/unified`.
-- CI validates the scaffold test harness even when local environments do not have `pytest` installed.
-
-## Follow-ups (Not in this PR)
-
-1. Add wallet/tasks/feed routers with forward stubs.
-2. Introduce `shadow` mode diff logging.
-3. Migrate one bounded context at a time (starting with wallet/auth policy).
+- Separate Vercel project rooted at `apps/bot`.
+- No migration to `front/api` in this PR.
+- English copy remains unchanged.
+- No DB/stateful idempotency added in this patch.

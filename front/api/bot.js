@@ -1,5 +1,10 @@
+/**
+ * Vercel serverless: Telegram webhook gateway.
+ * Uses Grammy for command and message handling (see bot-service/grammy-bot.js).
+ * Contract: GET = health; POST = validate (secret, size, body) → 200 ACK → process via Grammy.
+ */
 const config = require('../bot-service/config');
-const { processUpdate } = require('../bot-service/router');
+const { bot } = require('../bot-service/grammy-bot');
 const { getChatId, getUpdateKind } = require('../bot-service/telegram');
 const { logError, logWarn } = require('../bot-service/logger');
 
@@ -27,6 +32,7 @@ module.exports = async (req, res) => {
       ok: true,
       service: 'telegram-gateway',
       mode: 'webhook',
+      framework: 'grammy',
       aiHealthConfigured: Boolean(config.aiHealthUrl),
       televerseConfigured: Boolean(config.televerseBaseUrl && config.televerseInternalKey),
     });
@@ -52,7 +58,7 @@ module.exports = async (req, res) => {
     return res.status(400).json({ ok: false, error: 'invalid_json' });
   }
 
-  // Antifragile contract: acknowledge immediately after validation/parsing.
+  // Antifragile contract: acknowledge immediately after validation.
   res.status(200).json({ ok: true });
 
   const ctx = {
@@ -62,7 +68,7 @@ module.exports = async (req, res) => {
   };
 
   setImmediate(() => {
-    Promise.resolve(processUpdate(update)).catch((error) => {
+    bot.handleUpdate(update).catch((error) => {
       logError('telegram_webhook_error', error, ctx);
     });
   });

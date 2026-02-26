@@ -197,9 +197,9 @@ This also auto-regenerates favicon from `assets/HyperlinksSpace.svg` before buil
 - The app automatically expands to fill the screen when loaded in Telegram
 - The `vercel.json` configuration handles routing for the Flutter SPA
 
-## Telegram Webhook Gateway (Vercel JS)
+## Telegram Webhook Gateway (Vercel JS + Grammy)
 
-This repo also includes a thin Telegram webhook receiver under `front/api/bot.js`.
+This repo includes a Telegram webhook receiver under `front/api/bot.js`, using [Grammy](https://grammy.dev) for command and message handling (`front/bot-service/grammy-bot.js`).
 
 - Endpoint: `POST /api/bot`
 - Local commands: `/start`, `/help`, `/ping`

@@ -1,3 +1,7 @@
+header indent bag in fullsize
+
+rotation on swap page
+
 edit interval healthcheck
 
 Ticker link
@@ -7,6 +11,7 @@ Scrolling in AI widget fix
 Finish bot parts isolation
 
 ld timeout
+
 
 AI bd
 

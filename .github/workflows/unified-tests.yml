@@ -29,4 +29,4 @@ jobs:
           UNIFIED_MODE: forward
           PYTHONPATH: services/unified
         run: |
-          pytest -q services/unified/tests
+          python -m pytest -q services/unified/tests

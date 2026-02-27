@@ -113,6 +113,21 @@ flutter build web --release
 
 The built files will be in the `build/web` directory. You can deploy these files to a web server and set the URL in your Telegram Bot configuration.
 
+## App Store and Google Play
+
+**Current setup:** The app is a **Telegram Mini App** (Flutter web) deployed to **Vercel**. Users open it inside Telegram; there is no standalone store listing for that.
+
+**If you want App Store and Google Play listings:** Use the **same Flutter codebase** and build native binaries, then submit to Apple and Google. The backend (Vercel, `/api/*`, Grammy bot) does **not** change; the mobile app will call the same APIs (e.g. config, AI) and can still open the same Mini App URL in a WebView or use the same backend from a native UI.
+
+| Step | What to do |
+|------|------------|
+| **Build** | From `front/`: `flutter build ios` (Xcode required) and `flutter build appbundle` (Android). Fix any platform-specific config (e.g. `AndroidManifest.xml`, `Info.plist`, signing). |
+| **Apple** | Open `build/ios/` in Xcode, configure signing and capabilities, archive, then upload to App Store Connect and submit for review. |
+| **Google** | Upload the AAB from `build/app/outputs/bundle/release/` to Google Play Console, set store listing and release track. |
+| **Backend** | No change. Vercel (and bot, AI) stay as-is; the app uses the same base URL / env for API and Mini App link. |
+
+**Note:** If the app relies on `flutter_telegram_miniapp` (Telegram WebView), a standalone store build may need to open the Mini App URL in a browser or in-app WebView so Telegram login/context still work, or you expose a non-Mini-App flow that uses the same APIs. The serverless Grammy bot and AI features are reachable from any client (Mini App, iOS app, Android app) that calls your Vercel domain.
+
 ## Railway Deployment
 
 This service is configured for Railway deployment via the monorepo setup:
@@ -219,11 +234,73 @@ Supporting logic lives in `front/bot-service/*` for clean discoverability.
 - `TELEVERSE_BASE_URL` + `TELEVERSE_INTERNAL_KEY` - optional downstream forwarding
 - `APP_URL` - optional mini app button for `/start`
 
-### Webhook Scripts
+### Webhook vs local: do you need a webhook for local?
+
+**Recommended:** Use **polling for local** (no public URL, no ngrok) and **webhook only for Vercel deploy.**
+
+| Where      | How              | Public HTTPS URL? |
+|-----------|-------------------|-------------------|
+| **Local** | Polling (`run-bot-local.js`) | No — no tunnel needed. |
+| **Vercel**| Webhook (`/api/bot`)          | Yes — your Vercel domain. |
+
+- **Local:** Delete webhook (if set), run `run-bot-local.js`. The bot pulls updates via `getUpdates`. When done, set the webhook back to Vercel.
+- **Vercel:** After deploy, set the webhook once to `https://<your-vercel-domain>/api/bot`. Telegram POSTs there; no polling on the server.
+
+**Optional:** To test the exact webhook path locally (e.g. validate → 200 ACK), use ngrok + `run-bot-webhook-local.js` (see “Local testing with webhook” below).
+
+### Local testing (polling)
+
+1. **Remove the webhook** (if it was set for production), so Telegram stops sending to the Vercel URL:
+   ```bash
+   cd front
+   BOT_TOKEN="<your-token>" node scripts/delete-telegram-webhook.mjs
+   ```
+2. **Run the bot in polling mode:**
+   ```bash
+   cd front
+   BOT_TOKEN="<your-token>" node scripts/run-bot-local.js
+   ```
+   Optional: set `AI_HEALTH_URL`, `APP_URL`, `TELEVERSE_BASE_URL` / `TELEVERSE_INTERNAL_KEY` in the environment or in `front/.env` (if you use `dotenv`).
+3. Talk to the bot in Telegram; updates are received locally.
+4. When done, **set the webhook again** for Vercel so production receives updates:
+   ```bash
+   BOT_TOKEN="<token>" TELEGRAM_WEBHOOK_URL="https://<your-vercel-domain>/api/bot" node scripts/set-telegram-webhook.mjs
+   ```
+
+### Local testing with webhook (same logic as Vercel)
+
+To run the **same webhook path** locally (validate → 200 ACK → `bot.handleUpdate`), expose your machine and point Telegram at it:
+
+1. **Start the local webhook server** (same handler as `api/bot.js`):
+   ```bash
+   cd front
+   BOT_TOKEN="<token>" node scripts/run-bot-webhook-local.js
+   ```
+   Listens on `http://localhost:31337` (or set `PORT`).
+
+2. **Expose it with ngrok** (or localtunnel / cloudflared):
+   ```bash
+   ngrok http 31337
+   ```
+   Use the HTTPS URL ngrok shows (e.g. `https://abc123.ngrok-free.app`).
+
+3. **Set Telegram webhook to the tunnel + path:**
+   ```bash
+   TELEGRAM_WEBHOOK_URL="https://<ngrok-host>/api/bot" BOT_TOKEN="<token>" node scripts/set-telegram-webhook.mjs
+   ```
+   If you use `TELEGRAM_WEBHOOK_SECRET` on Vercel, set it in env here too.
+
+4. Open the ngrok URL in the browser: `https://<ngrok-host>/api/bot` → GET should return the same health JSON as production.
+
+5. Talk to the bot; Telegram POSTs to the tunnel → your local server runs the same code as Vercel.
+
+6. When done, point the webhook back at Vercel (see “Webhook scripts (production)”).
+
+### Webhook scripts (production)
 
 ```bash
-node scripts/set-telegram-webhook.mjs
-node scripts/delete-telegram-webhook.mjs
+node scripts/set-telegram-webhook.mjs   # after deploy: point Telegram to your Vercel URL
+node scripts/delete-telegram-webhook.mjs # remove webhook (e.g. before local polling)
 ```
 
 Expected `TELEGRAM_WEBHOOK_URL` example:

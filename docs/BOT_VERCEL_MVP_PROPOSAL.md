@@ -159,6 +159,23 @@ front/
 
 ---
 
+## Serverless constraints and how to meet them in the future
+
+Vercel (and similar) serverless has fixed limits. The current design already respects most of them; below is what can bite later and how to stay within constraints or adapt.
+
+| Constraint | Limit (typical) | How we meet it today | If we hit it later |
+|------------|------------------|----------------------|--------------------|
+| **Execution time** | Free ~10 s, Pro ~60 s (per request) | We 200 ACK immediately, then run `bot.handleUpdate(update)` in the same invocation. Handler stays short (commands, one AI call, etc.). | Keep work under the limit: short AI calls, or **offload** — e.g. handler enqueues the update (SQS, Inngest, etc.) and a worker (or your AI backend) does the work and sends the reply via Telegram API. Or move heavy flows to a **long-running service** (e.g. JS gateway forwards to Dart/Televerse or a worker). |
+| **Cold start** | ~1–3 s first request after idle | Accepted for a bot; no change needed. | Optional: keep-warm ping or accept the delay. |
+| **Memory** | e.g. 1 GB | Grammy + handlers are light. | If you add heavy deps or big in-memory work, trim or move that work to an API. |
+| **No long-running process** | Request in, response out; no persistent connection | We use webhook only; no polling on Vercel. | Stays the same. Polling or WebSockets require a different host. |
+| **Payload size** | Request/response body limits | We cap Telegram body with `TELEGRAM_BODY_LIMIT_BYTES`. | Keep cap; reject oversized with 413. |
+| **Stateless** | No shared in-process state between requests | We use env vars and external APIs only. | Use DB or external store for any state; no change to approach. |
+
+**Summary:** You can keep meeting serverless constraints by (1) **keeping the handler fast** (short AI/API calls, or trigger-and-return), (2) **offloading long work** to your AI backend or a queue + worker, and (3) **moving only the heavy or long-lived parts** to a long-running host (e.g. Televerse on Railway) if needed, while the webhook stays on Vercel. The current 200-ACK-then-handle pattern is already aligned with these limits; future growth is mainly about where the work runs (same function vs API vs worker), not changing the webhook contract.
+
+---
+
 ## Recommendation
 
 **Preferred: JS webhook (Vercel) + Televerse (Dart) for logic.**

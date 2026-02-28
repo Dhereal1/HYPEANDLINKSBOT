@@ -46,6 +46,6 @@
         }
       ]
     }
-  ]
+  ],
+  "buildCommand": "npm run bot:build"
 }
-

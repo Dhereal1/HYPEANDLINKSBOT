@@ -1,4 +1,4 @@
-import { Bot, Context } from "grammy";
+import { Bot, Context, NextFunction } from "grammy";
 
 // Minimal env contract (Seva-approved)
 export type BotEnv = {
@@ -28,7 +28,7 @@ export function createBot(env: BotEnv, deps: BotDeps = {}): Bot<Context> {
   // Simple in-memory dedupe (best-effort serverless protection)
   const seen = new Set<number>();
 
-  bot.use(async (ctx, next) => {
+  bot.use(async (ctx: Context, next: NextFunction) => {
     const updateId = ctx.update?.update_id;
     if (typeof updateId === "number") {
       if (seen.has(updateId)) {
@@ -51,7 +51,7 @@ export function createBot(env: BotEnv, deps: BotDeps = {}): Bot<Context> {
   });
 
   // Commands
-  bot.command("start", async (ctx) => {
+  bot.command("start", async (ctx: Context) => {
     const t0 = Date.now();
     await ctx.reply(
       "Welcome 👋\n\nCommands:\n/start\n/help\n/ping\n\n(If something is down, I still respond.)"
@@ -63,7 +63,7 @@ export function createBot(env: BotEnv, deps: BotDeps = {}): Bot<Context> {
     });
   });
 
-  bot.command("help", async (ctx) => {
+  bot.command("help", async (ctx: Context) => {
     const t0 = Date.now();
     await ctx.reply("Help:\n/start — welcome\n/ping — health ping");
     log(deps.logger, {
@@ -73,7 +73,7 @@ export function createBot(env: BotEnv, deps: BotDeps = {}): Bot<Context> {
     });
   });
 
-  bot.command("ping", async (ctx) => {
+  bot.command("ping", async (ctx: Context) => {
     const t0 = Date.now();
     await ctx.reply("pong ✅");
     log(deps.logger, {
@@ -84,7 +84,7 @@ export function createBot(env: BotEnv, deps: BotDeps = {}): Bot<Context> {
   });
 
   // Fallback text handler (deterministic local reply; no Televerse)
-  bot.on("message:text", async (ctx) => {
+  bot.on("message:text", async (ctx: Context) => {
     const t0 = Date.now();
     await ctx.reply("Got it ✅ Use /help for commands.");
     log(deps.logger, {

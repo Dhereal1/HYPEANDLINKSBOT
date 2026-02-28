@@ -120,6 +120,8 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
   @override
   Widget build(BuildContext context) {
     final topPadding = GlobalLogoBar.getContentTopPadding();
+    // Match MainPage: no external top gap when not fullscreen; internal layout already
+    // reserves 30px header height, so we only need the scrollbar to start flush.
     final bottomBarHeight = _getGlobalBottomBarHeight();
 
     return Scaffold(
@@ -139,14 +141,17 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 570),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: SizedBox(
-                          height: 30,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                        top: topPadding == 0.0 ? 10.0 : 0.0),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: SizedBox(
+                            height: 30,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -274,6 +279,7 @@ class _CopyableDetailPageState extends State<CopyableDetailPage>
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ),
               ),

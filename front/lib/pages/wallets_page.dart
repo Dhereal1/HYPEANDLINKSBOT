@@ -20,6 +20,8 @@ class WalletsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topPadding = GlobalLogoBar.getContentTopPadding();
+    // Match MainPage: add a small internal gap when TMA is not fullscreen.
+    final needsScrollableTopGap = topPadding == 0.0;
     final bottomPadding = _getAdaptiveBottomPadding();
 
     return Scaffold(
@@ -47,6 +49,8 @@ class WalletsPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (needsScrollableTopGap)
+                      const SizedBox(height: 10),
                     SizedBox(
                       height: 30,
                       child: Center(

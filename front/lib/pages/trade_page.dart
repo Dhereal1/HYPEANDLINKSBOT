@@ -316,6 +316,10 @@ class _TradePageState extends State<TradePage> {
         child: Builder(
           builder: (context) {
             final topPadding = GlobalLogoBar.getContentTopPadding();
+            // When topPadding is 0 (TMA not fullscreen), we add a small top gap
+            // inside the scrollable content so the scrollbar sticks to the
+            // top edge of the viewport, matching MainPage behavior.
+            final needsScrollableTopGap = topPadding == 0.0;
             final bottomPadding = _getAdaptiveBottomPadding();
             return Stack(
               children: [
@@ -341,6 +345,8 @@ class _TradePageState extends State<TradePage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (needsScrollableTopGap)
+                      const SizedBox(height: 10),
                     // First block: 2 columns with pictures, titles, subtitles
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +533,7 @@ class _TradePageState extends State<TradePage> {
                 // Scroll indicator - same as main page
                 Positioned(
                   right: 5,
-                  top: GlobalLogoBar.getContentTopPadding(),
+                  top: topPadding,
                   bottom: bottomPadding,
                   child: LayoutBuilder(
                     builder: (context, constraints) {

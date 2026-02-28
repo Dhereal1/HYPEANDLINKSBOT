@@ -1578,6 +1578,10 @@ class _SwapPageState extends State<SwapPage> {
             // Calculate padding statically to avoid rebuilds when keyboard opens
             // The logo visibility doesn't actually change when keyboard opens,
             // so we don't need to listen to fullscreenNotifier here
+            final topPadding = GlobalLogoBar.getContentTopPadding();
+            // When topPadding is 0 (TMA not fullscreen), we add a small top gap
+            // inside the scrollable content so the layout matches MainPage.
+            final needsScrollableTopGap = topPadding == 0.0;
             return GestureDetector(
               behavior: HitTestBehavior.translucent,
               onHorizontalDragStart: _onResolutionSwipeStart,
@@ -1586,7 +1590,7 @@ class _SwapPageState extends State<SwapPage> {
               child: Padding(
                 padding: EdgeInsets.only(
                     bottom: _getAdaptiveBottomPadding(),
-                    top: GlobalLogoBar.getContentTopPadding()),
+                    top: topPadding),
                 child: Center(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
@@ -1607,6 +1611,8 @@ class _SwapPageState extends State<SwapPage> {
                                     width: double.infinity,
                                     child: Column(
                                       children: [
+                                      if (needsScrollableTopGap)
+                                        const SizedBox(height: 10),
                                       LayoutBuilder(
                                         builder: (context, constraints) {
                                           // Always measure text width using the longest label "(Hour)" to prevent layout shifts

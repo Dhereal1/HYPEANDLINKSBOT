@@ -45,6 +45,8 @@ class _APageExampleState extends State<APageExample> {
   @override
   Widget build(BuildContext context) {
     final topPadding = GlobalLogoBar.getContentTopPadding();
+    // Match MainPage: add internal gap when not fullscreen.
+    final needsScrollableTopGap = topPadding == 0.0;
     final bottomPadding = _getAdaptiveBottomPadding();
 
     return Scaffold(
@@ -80,6 +82,8 @@ class _APageExampleState extends State<APageExample> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (needsScrollableTopGap)
+                                const SizedBox(height: 10),
                               Text(
                                 'A Page Example',
                                 style: TextStyle(

@@ -87,6 +87,8 @@ class _AppsPageState extends State<AppsPage> {
   @override
   Widget build(BuildContext context) {
     final topPadding = GlobalLogoBar.getContentTopPadding();
+    // Match MainPage: add internal top gap when not fullscreen.
+    final needsScrollableTopGap = topPadding == 0.0;
     final bottomPadding = _getAdaptiveBottomPadding();
     final screenWidth = MediaQuery.sizeOf(context).width;
     // Content width: full width minus horizontal padding, capped at 570
@@ -117,6 +119,8 @@ class _AppsPageState extends State<AppsPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (needsScrollableTopGap)
+                          const SizedBox(height: 10),
                         for (int i = 0; i < _imageAssets.length; i++) ...[
                           if (i > 0) const SizedBox(height: _gapBetween),
                           SizedBox(

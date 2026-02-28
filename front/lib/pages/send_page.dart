@@ -146,6 +146,9 @@ class _SendPageState extends State<SendPage> {
                   // The logo visibility doesn't actually change when keyboard opens,
                   // so we don't need to listen to fullscreenNotifier here
                   final topPadding = GlobalLogoBar.getContentTopPadding();
+                  // When topPadding is 0 (TMA not fullscreen), we add a small top gap
+                  // inside the scrollable content so the scrollbar sticks to the top.
+                  final needsScrollableTopGap = topPadding == 0.0;
                   return Padding(
                     padding: EdgeInsets.only(
                       bottom: _getAdaptiveBottomPadding() + bottomBarHeight + 60, // Add space for button
@@ -161,6 +164,8 @@ class _SendPageState extends State<SendPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                        if (needsScrollableTopGap)
+                          const SizedBox(height: 10),
                         // First content row (30px height to match main/CopyableDetailPage title row)
                         SizedBox(
                           height: 30,

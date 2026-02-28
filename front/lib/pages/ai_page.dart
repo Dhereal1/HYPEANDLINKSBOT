@@ -244,6 +244,8 @@ class _AiPageState extends State<AiPage> {
   @override
   Widget build(BuildContext context) {
     final topPadding = GlobalLogoBar.getContentTopPadding();
+    // Match MainPage: small internal gap when not fullscreen.
+    final needsScrollableTopGap = topPadding == 0.0;
     final bottomPadding = _getAdaptiveBottomPadding();
     final entries = AiConversationController.instance.entriesNotifier.value;
 
@@ -266,7 +268,12 @@ class _AiPageState extends State<AiPage> {
                     builder: (context, constraints) {
                       return ListView.separated(
                         controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(15, 30, 15, 30),
+                        padding: EdgeInsets.fromLTRB(
+                          15,
+                          30 + (needsScrollableTopGap ? 10 : 0),
+                          15,
+                          30,
+                        ),
                         itemCount: entries.length + 1,
                         separatorBuilder: (_, __) => const SizedBox(height: 30),
                         itemBuilder: (context, index) {

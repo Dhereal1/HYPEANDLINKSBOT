@@ -106,3 +106,9 @@ export async function startPolling(env: BotEnv, deps: BotDeps = {}): Promise<voi
   const bot = getBot(env, deps);
   await bot.start();
 }
+
+export * from "./ai.js";
+export * from "./rag.js";
+export * from "./llm.js";
+export * from "./fallback.js";
+export * from "./types.js";

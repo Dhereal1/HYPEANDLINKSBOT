@@ -106,6 +106,8 @@ class _WalletPanelPageState extends State<WalletPanelPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (topPadding == 0.0)
+                      const SizedBox(height: 10),
                     WalletPanel(
                       state: _mockPanelState,
                       mockState: _mockState,

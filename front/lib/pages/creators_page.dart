@@ -56,6 +56,8 @@ class CreatorsPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (topPadding == 0.0)
+                            const SizedBox(height: 10),
                           Text(
                             "A Creator's Page",
                             style: TextStyle(

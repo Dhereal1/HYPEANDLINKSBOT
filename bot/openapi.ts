@@ -22,7 +22,7 @@ const options: OpenAiOptions = {
   timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 35000),
   enabled: (process.env.OPENAI_ENABLED || "1").trim() === "1",
   dryRun: (process.env.OPENAI_DRY_RUN || "0").trim() === "1",
-  maxRequests: Number(process.env.OPENAI_MAX_REQUESTS || 5),
+  maxRequests: Number(process.env.OPENAI_MAX_REQUESTS || 2),
 };
 
 let requestCount = 0;
@@ -74,10 +74,9 @@ export async function callOpenAi(messages: ChatMessage[], temperature = 0.3, mod
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`OpenAI error ${response.status}: ${detail.slice(0, 300)}`);
-    }
+      if (!response.ok) {
+        throw new Error(`OpenAI error ${response.status}`);
+      }
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
@@ -87,4 +86,3 @@ export async function callOpenAi(messages: ChatMessage[], temperature = 0.3, mod
     clearTimeout(timeout);
   }
 }
-

@@ -34,7 +34,7 @@ Brings in 3 commits from HyperlinksSpace/HyperlinksSpaceBot:
 
 - **Expo app (app/):** Simplified to a single screen + layout; removed tabs and extra components. Ready for Vercel (`npx expo export -p web`).
 
-- **Telegram bot (Grammy):** Minimal bot in `app/bot/` (replies Hello, /start). Webhook handler in `app/bot/webhook.js` (GET sets webhook, POST handles updates); `app/api/bot.js` exposes it as a Vercel serverless route with named GET/POST. Webhook is set automatically on deploy via `scripts/set-webhook.js`. Optional `SELF_URL` for production domain (e.g. https://yourapp.vercel.app); `bot.init()` before `handleUpdate` for webhook mode.
+- **Telegram bot (Grammy):** Minimal bot in `app/bot/` (replies Hello, /start). Webhook handler in `app/bot/webhook.js` (GET sets webhook, POST handles updates); `app/api/bot.js` exposes it as a Vercel serverless route with named GET/POST. Webhook is set automatically on deploy via `scripts/set-webhook.js`. Webhook URL comes from Vercel env (VERCEL_PROJECT_PRODUCTION_URL or VERCEL_URL); `bot.init()` before `handleUpdate` for webhook mode.
 
 - **Local run:** `scripts/run-bot-local.js` runs the bot with getUpdates (polling); only `BOT_TOKEN` needed. `npm run start` runs Expo + bot; `npm run bot:local` runs bot only.
 

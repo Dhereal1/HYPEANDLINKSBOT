@@ -14,9 +14,13 @@ interface TelegramUpdate {
 }
 
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+// Vercel production alias (VERCEL_PROJECT_PRODUCTION_URL) or deployment URL (VERCEL_URL).
 const BASE_URL =
-  (process.env.SELF_URL || '').replace(/\/$/, '') ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : '';
 
 function jsonResponse(data: object, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -74,7 +78,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       service: 'telegram-bot',
       bot: !!BOT_TOKEN,
       vercel_url_set: !!BASE_URL,
-      expected_url: expectedUrl || '(set SELF_URL or VERCEL_URL)',
+      expected_url: expectedUrl || '(set VERCEL_URL / VERCEL_PROJECT_PRODUCTION_URL)',
       telegram_has: current.url || '(none)',
     });
   }
@@ -154,7 +158,7 @@ async function legacyHandler(req: NodeReq, res: NodeRes): Promise<void> {
         service: 'telegram-bot',
         bot: !!BOT_TOKEN,
         vercel_url_set: !!BASE_URL,
-        expected_url: expectedUrl || '(set SELF_URL or VERCEL_URL)',
+        expected_url: expectedUrl || '(set VERCEL_URL / VERCEL_PROJECT_PRODUCTION_URL)',
         telegram_has: current.url || '(none)',
       });
     }

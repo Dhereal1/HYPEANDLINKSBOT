@@ -40,3 +40,7 @@ yarn-error.*
 app-example
 
 .vercel
+
+# Explicit env variants
+.env.local
+.env.production

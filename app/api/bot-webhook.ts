@@ -80,12 +80,17 @@ function createBot(token: string): Bot {
 
   bot.on('message:text', async (ctx: Context) => {
     await handleUserUpsert(ctx);
-    const text = ctx.message.text;
-
+  
+    const text = ctx.message?.text;
+    if (!text) {
+      await ctx.reply('I could not read that message.');
+      return;
+    }
+  
     const result = await handleChat({
-      messages: [{ role: "user", content: text }]
+      messages: [{ role: "user", content: text }],
     });
-
+  
     await ctx.reply(result.text);
   });
 

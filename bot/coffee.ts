@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 export type CoffeeTokenContext = {
   symbol: string;
   name?: string;
@@ -116,4 +118,3 @@ export async function fetchCoffeeContext(symbolInput: string): Promise<CoffeeTok
   cache.set(symbol, { value: result, expiresAt: Date.now() + CACHE_TTL_MS });
   return result;
 }
-

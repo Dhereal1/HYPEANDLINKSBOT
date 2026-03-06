@@ -3,7 +3,7 @@
  * Used by bot/webhook.ts (Vercel) and scripts/run-bot-local.ts (polling).
  */
 import { Bot, type Context } from 'grammy';
-import { normalizeUsername, upsertUserFromBot } from '../server/users';
+import { normalizeUsername, upsertUserFromBot } from '../server/users.js';
 import { handleChat } from './handler.js';
 
 export function createBot(token: string): Bot {

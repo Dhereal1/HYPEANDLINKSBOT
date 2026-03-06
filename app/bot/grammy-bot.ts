@@ -4,6 +4,7 @@
  */
 import { Bot, type Context } from 'grammy';
 import { normalizeUsername, upsertUserFromBot } from '../server/users';
+import { handleChat } from './handler';
 
 export function createBot(token: string): Bot {
   const bot = new Bot(token);
@@ -32,7 +33,15 @@ export function createBot(token: string): Bot {
 
   bot.on('message:text', async (ctx: Context) => {
     await handleUserUpsert(ctx);
-    await ctx.reply('Hello');
+
+    const text = ctx.message?.text;
+    if (!text) return;
+
+    const result = await handleChat({
+      messages: [{ role: "user", content: text }]
+    });
+
+    await ctx.reply(result.text);
   });
 
   bot.on('message', async (ctx: Context) => {
@@ -46,4 +55,3 @@ export function createBot(token: string): Bot {
 
   return bot;
 }
-

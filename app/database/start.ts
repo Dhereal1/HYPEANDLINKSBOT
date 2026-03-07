@@ -1,11 +1,13 @@
-import 'dotenv/config';
-import { neon } from '@neondatabase/serverless';
+import "dotenv/config";
+import { neon } from "@neondatabase/serverless";
 
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
   // Fail fast on the server side so misconfiguration is obvious in logs.
-  throw new Error('DATABASE_URL is not set. Configure it in ./app/.env for the current Neon branch.');
+  throw new Error(
+    "DATABASE_URL is not set. Configure it in ./app/.env for the current Neon branch.",
+  );
 }
 
 export const sql = neon(connectionString);
@@ -77,6 +79,31 @@ async function runSchemaMigrations() {
     CREATE INDEX IF NOT EXISTS idx_pending_tx_status
       ON pending_transactions(status);
   `;
+
+  // messages table (AI: bot + TMA)
+  await sql`
+    CREATE TABLE IF NOT EXISTS messages (
+      id                  BIGSERIAL PRIMARY KEY,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      user_telegram       TEXT NOT NULL REFERENCES users(telegram_username),
+      thread_id           BIGINT NOT NULL,
+      type                TEXT NOT NULL CHECK (type IN ('bot', 'app')),
+      role                TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+      content             TEXT,
+      telegram_update_id  BIGINT
+    );
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_messages_thread
+      ON messages(user_telegram, thread_id, type, created_at);
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_bot_update_id
+      ON messages(user_telegram, thread_id, type, telegram_update_id)
+      WHERE telegram_update_id IS NOT NULL;
+  `;
 }
 
 let schemaInitPromise: Promise<void> | null = null;
@@ -84,7 +111,7 @@ let schemaInitPromise: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
   if (!schemaInitPromise) {
     schemaInitPromise = runSchemaMigrations().catch((err) => {
-      console.error('[db] schema init failed', err);
+      console.error("[db] schema init failed", err);
       schemaInitPromise = null;
       throw err;
     });

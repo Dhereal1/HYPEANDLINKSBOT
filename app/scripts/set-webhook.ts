@@ -1,19 +1,29 @@
 /**
  * Set Telegram webhook on deploy. Run during Vercel build.
- * Requires BOT_TOKEN and either SELF_URL (recommended) or VERCEL_URL.
- * In Vercel: add BOT_TOKEN and SELF_URL (e.g. https://hsbexpo.vercel.app) and assign to Production (and enable for Build).
+ * Requires BOT_TOKEN and a base URL. Base URL is VERCEL_PROJECT_PRODUCTION_URL
+ * (Vercel's production alias, e.g. hsbexpo.vercel.app) or VERCEL_URL (deployment-specific).
  */
 
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-const SELF_URL = (process.env.SELF_URL ?? '').replace(/\/$/, '');
+const VERCEL_PROJECT_PRODUCTION_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL;
 const VERCEL_URL = process.env.VERCEL_URL;
-const baseUrl = SELF_URL || (VERCEL_URL ? `https://${VERCEL_URL}` : '');
+const baseUrl =
+  VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${VERCEL_PROJECT_PRODUCTION_URL}`
+    : VERCEL_URL
+      ? `https://${VERCEL_URL}`
+      : '';
 
 const WEBHOOK_PATH = '/api/bot';
 const FETCH_TIMEOUT_MS = 15_000;
 
 async function setWebhook(): Promise<void> {
-  console.log('[set-webhook] env: VERCEL_ENV=%s VERCEL_URL=%s SELF_URL=%s', process.env.VERCEL_ENV ?? '', VERCEL_URL ?? '(none)', SELF_URL || '(none)');
+  console.log(
+    '[set-webhook] env: VERCEL_ENV=%s VERCEL_URL=%s VERCEL_PROJECT_PRODUCTION_URL=%s',
+    process.env.VERCEL_ENV ?? '',
+    VERCEL_URL ?? '(none)',
+    VERCEL_PROJECT_PRODUCTION_URL ?? '(none)',
+  );
 
   if (!BOT_TOKEN) {
     console.log('[set-webhook] Skip: BOT_TOKEN not set. Add BOT_TOKEN in Vercel → Settings → Environment Variables (Production, include in Build).');
@@ -21,7 +31,7 @@ async function setWebhook(): Promise<void> {
   }
 
   if (!baseUrl) {
-    console.log('[set-webhook] Skip: no webhook URL (SELF_URL/VERCEL_URL). Set SELF_URL in Vercel env for production deploy.');
+    console.log('[set-webhook] Skip: no webhook URL (VERCEL_URL / VERCEL_PROJECT_PRODUCTION_URL).');
     return;
   }
 

@@ -73,15 +73,15 @@ Deploying from `app/` makes this folder the project root, so `api/bot` is deploy
 A minimal bot that replies "Hello" is included. It is deployable on Vercel via webhook and runnable locally with getUpdates.
 
 **Vercel (webhook)**  
-- **Env for deploy:** In Vercel → **Settings → Environment Variables** add **`BOT_TOKEN`** (or `TELEGRAM_BOT_TOKEN`) and **`SELF_URL`** = your production URL (e.g. `https://hsbexpo.vercel.app`). Assign both to **Production** (and to **Build** if your dashboard has that option) so the deploy-step webhook script can run. Without `SELF_URL`, the build uses `VERCEL_URL`, which may not match your production domain.
-- **Webhook on deploy:** Each build runs `scripts/set-webhook.ts` and calls Telegram `setWebhook` with `SELF_URL/api/bot` (or `VERCEL_URL/api/bot`). If the script fails (e.g. missing URL or Telegram error), the build fails so you see the error in the deploy log.
+- **Env for deploy:** In Vercel → **Settings → Environment Variables** add **`BOT_TOKEN`** (or `TELEGRAM_BOT_TOKEN`). Assign to **Production** (and to **Build** if your dashboard has that option) so the deploy-step webhook script can run. The webhook URL is built from Vercel’s `VERCEL_PROJECT_PRODUCTION_URL` or `VERCEL_URL`.
+- **Webhook on deploy:** Each build runs `scripts/set-webhook.ts` and calls Telegram `setWebhook` with the base URL + `/api/bot`. If the script fails (e.g. missing URL or Telegram error), the build fails so you see the error in the deploy log.
 - Telegram sends updates to **POST** `/api/bot`; the bot replies "Hello".
 
 **Bot works locally but not on Vercel**  
 1. Open **GET** `https://<your-app>.vercel.app/api/bot` in a browser. The JSON shows:
    - `bot: true` → BOT_TOKEN is set; `bot: false` → add BOT_TOKEN in Vercel → Settings → Environment Variables (Production), then redeploy.
-   - `expected_url` → URL we use for the webhook (from SELF_URL or VERCEL_URL).
-   - `telegram_has` → URL Telegram actually has. It must match your production URL (e.g. `https://hsbexpo.vercel.app/api/bot`). If it’s `(none)` or a different URL, set **SELF_URL** = `https://<your-app>.vercel.app` in Vercel env and redeploy so the build runs set-webhook.ts with that URL.
+   - `expected_url` → URL we use for the webhook (from VERCEL_PROJECT_PRODUCTION_URL or VERCEL_URL).
+   - `telegram_has` → URL Telegram actually has. It must match your production URL (e.g. `https://hsbexpo.vercel.app/api/bot`). If it’s `(none)` or different, ensure the project’s production domain is set in Vercel and redeploy so set-webhook.ts runs with the correct URL.
    - `webhook_set: true` → last setWebhook call succeeded.
 2. **Root directory:** Only needed if you deploy via Git (auto-deploy from the repo). Then set **Root Directory** to **`app`** in Vercel → Project Settings → General. If you always run `vercel --prod` from inside `app/`, the CLI uses this folder as the project root and you don’t need to set it.
 3. **Logs:** After sending /start, check **Logs** for `[webhook] POST update` and any `[bot]` errors (e.g. handler_error, timeout).

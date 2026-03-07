@@ -11,8 +11,8 @@
     "isolatedModules": true
   },
   "include": [
-    "*.ts",
-    "*.tsx",
+    "**/*.ts",
+    "**/*.tsx",
     "../bot/**/*.ts"
   ]
 }

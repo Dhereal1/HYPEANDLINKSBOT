@@ -6,7 +6,7 @@ import { Bot, type Context } from 'grammy';
 import {
   normalizeUsername,
   upsertUserFromBot,
-} from '../shared/users.js';
+} from '../database/users.js';
 import { handleBotAiResponse } from './responder.js';
 
 export function createBot(token: string): Bot {

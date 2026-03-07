@@ -8,7 +8,7 @@ import {
   readyAndExpand,
   triggerHaptic as triggerHapticImpl,
 } from "./telegramWebApp";
-import { buildApiUrl } from "../../shared/apiBase";
+import { buildApiUrl } from "../../api/base";
 
 let sdkInitialized = false;
 function ensureSdkInitialized() {

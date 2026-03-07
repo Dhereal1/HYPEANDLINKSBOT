@@ -1,5 +1,5 @@
 /**
- * Shared API base URL helper used by both frontend and bot.
+ * API base URL helper used by frontend and bot.
  *
  * Priority:
  * - EXPO_PUBLIC_API_BASE_URL (explicit override for any environment)

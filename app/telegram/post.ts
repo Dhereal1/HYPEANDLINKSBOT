@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import {
   normalizeUsername,
   upsertUserFromTma,
-} from '../shared/users.js';
+} from '../database/users.js';
 
 const LOG_TAG = '[api/telegram]';
 

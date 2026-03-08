@@ -100,30 +100,33 @@ export async function handleRequest(request: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: 'BOT_TOKEN not set' }, 500);
   }
 
-  // Return 200 immediately so Telegram does not delay or hide the user's message.
-  // Read body and process update inside waitUntil so the next request is not blocked.
+  // Read body before returning 200. Once we return, the request may be closed and body
+  // unavailable, so reading it inside waitUntil can fail and the message is lost.
+  let update: TelegramUpdate;
+  try {
+    const body =
+      typeof request.json === 'function'
+        ? await request.json()
+        : (request as unknown as { body?: unknown }).body;
+    update =
+      typeof body === 'string'
+        ? (JSON.parse(body) as TelegramUpdate)
+        : (body as TelegramUpdate);
+  } catch {
+    console.error('[webhook] invalid_body');
+    return jsonResponse({ ok: false, error: 'invalid_body' }, 400);
+  }
+  if (!update || typeof update !== 'object') {
+    console.error('[webhook] invalid update');
+    return jsonResponse({ ok: false, error: 'invalid_update' }, 400);
+  }
+
+  // Return 200 so Telegram does not delay or hide the user's message. Process update
+  // in waitUntil so we don't block the response on AI/DB.
+  const updateId = update.update_id;
+  console.log('[webhook] POST update', updateId);
   waitUntil(
     (async () => {
-      let update: TelegramUpdate;
-      try {
-        const body =
-          typeof request.json === 'function'
-            ? await request.json()
-            : (request as unknown as { body?: unknown }).body;
-        update =
-          typeof body === 'string'
-            ? (JSON.parse(body) as TelegramUpdate)
-            : (body as TelegramUpdate);
-      } catch {
-        console.error('[webhook] invalid_body');
-        return;
-      }
-      if (!update || typeof update !== 'object') {
-        console.error('[webhook] invalid update');
-        return;
-      }
-      const updateId = update.update_id;
-      console.log('[webhook] POST update', updateId);
       try {
         await ensureBotInit();
         await bot!.handleUpdate(update);

@@ -1,6 +1,6 @@
-raw text fallbacking
 multi-message responce
-messages interruption
+several chats async streaming
+messages interruption (to think about)
 AI responce checkup in bot
 Slash rotation
 Min chars estimate

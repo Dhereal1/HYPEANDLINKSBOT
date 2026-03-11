@@ -1,0 +1,5 @@
+# Never send env files to Vercel (secrets stay in dashboard only).
+# Vercel auto-ignores .env.local and .env.*.local but NOT plain .env.
+.env
+.env.local
+.env.*.local

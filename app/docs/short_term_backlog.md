@@ -1,9 +1,9 @@
-Sto
-AI responce checkup in bot
+Basic layout + AI & Search bar
+Stop responce
+AI responce checkup in bot (message interruption on new prompt)
 Slash rotation
 Min chars estimate
 App theme
-AI & Search bar
 
 To think about:
 

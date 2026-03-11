@@ -1,0 +1,23 @@
+/* Global web-only overrides */
+
+/* Hide native textarea scrollbars (React Native Web TextInput) while keeping scroll behaviour. */
+textarea {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+textarea::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Make the AI & Search textarea truly 20px tall for one line */
+textarea[data-ai-input="true"] {
+  min-height: 20px !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border: none !important;
+  box-sizing: content-box;
+}
+

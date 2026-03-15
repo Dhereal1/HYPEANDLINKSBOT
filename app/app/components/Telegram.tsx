@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { init, viewport } from "@tma.js/sdk-react";
+import { Platform } from "react-native";
 import {
   ensureTelegramScript,
   getInitDataString,
@@ -10,10 +11,12 @@ import {
 } from "./telegramWebApp";
 import { buildApiUrl } from "../../shared/apiBase";
 
+const isWebPlatform = Platform.OS === "web";
+
 let sdkInitialized = false;
 function ensureSdkInitialized() {
   if (sdkInitialized) return;
-  if (typeof window === "undefined") return;
+  if (!isWebPlatform || typeof window === "undefined") return;
   try {
     init();
     sdkInitialized = true;
@@ -22,13 +25,13 @@ function ensureSdkInitialized() {
   }
 }
 
-if (typeof window !== "undefined") {
+if (isWebPlatform && typeof window !== "undefined") {
   ensureSdkInitialized();
 }
 
 /** True if we're likely inside Telegram Mini App (avoid tma.js viewport calls when false). */
 function isLikelyInTma(): boolean {
-  if (typeof window === "undefined") return false;
+  if (!isWebPlatform || typeof window === "undefined") return false;
   try {
     return !!(window as unknown as { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp;
   } catch {
@@ -128,7 +131,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!isWebPlatform || typeof window === "undefined") {
       setDebug((d) => ({ ...d, hasWebApp: false, apiMessage: "no window" }));
       setStatus("dev");
       return;

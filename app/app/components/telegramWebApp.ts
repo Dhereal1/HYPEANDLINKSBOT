@@ -5,6 +5,7 @@
  * - Start parameter: in URL query params (startattach or startapp), NOT in hash. Also in init data start_param.
  * - Allowed start param: A-Z, a-z, 0-9, _, -; max 512 chars. Validate with /^[\w-]{0,512}$/
  */
+import { Platform } from "react-native";
 
 export type TelegramWebApp = {
   initData?: string;
@@ -28,11 +29,19 @@ declare global {
 let cachedHashParams: URLSearchParams | null = null;
 let cachedInitDataFromHash: string | null | undefined = undefined;
 
+function hasBrowserWindow(): boolean {
+  return Platform.OS === "web" && typeof window !== "undefined";
+}
+
+function hasBrowserDom(): boolean {
+  return hasBrowserWindow() && typeof document !== "undefined";
+}
+
 /** Get launch params from URL hash. Cached on first read so hash routing doesn't lose them. */
 function getLaunchParamsFromHash(): URLSearchParams | null {
-  if (typeof window === "undefined") return null;
+  if (!hasBrowserWindow()) return null;
   if (cachedHashParams) return cachedHashParams;
-  const hash = window.location.hash.slice(1);
+  const hash = window.location?.hash?.slice(1) ?? "";
   if (!hash) return null;
   cachedHashParams = new URLSearchParams(hash);
   return cachedHashParams;
@@ -49,7 +58,7 @@ function getInitDataFromHash(): string | null {
 }
 
 function getWebApp(): TelegramWebApp | null {
-  if (typeof window === "undefined") return null;
+  if (!hasBrowserWindow()) return null;
   const tg = (window as Window).Telegram;
   const app = tg?.WebApp ?? null;
   return app;
@@ -63,7 +72,7 @@ export function isAvailable(): boolean {
 
 /** Load Telegram Web App script if missing (script is not auto-injected; page must include or load it). */
 export function ensureTelegramScript(): void {
-  if (typeof window === "undefined") return;
+  if (!hasBrowserDom()) return;
   if ((window as Window).Telegram?.WebApp) return;
   if (document.querySelector('script[src*="telegram.org/js/telegram-web-app"]')) return;
 
@@ -168,8 +177,8 @@ export function getPlatformFromHash(): string | null {
 const START_PARAM_REGEX = /^[\w-]{0,512}$/;
 
 export function getStartParam(): string | null {
-  if (typeof window === "undefined") return null;
-  const fromQuery = new URLSearchParams(window.location.search);
+  if (!hasBrowserWindow()) return null;
+  const fromQuery = new URLSearchParams(window.location?.search ?? "");
   const fromHash = getLaunchParamsFromHash();
   const raw =
     fromQuery.get("startattach") ??
@@ -181,4 +190,3 @@ export function getStartParam(): string | null {
   const s = raw.trim();
   return s.length > 0 && START_PARAM_REGEX.test(s) ? s : null;
 }
-

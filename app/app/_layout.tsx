@@ -1,7 +1,8 @@
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
 import { Stack } from "expo-router";
 import { TelegramProvider } from "./components/Telegram";
 import { GlobalLogoBarWithFallback } from "./components/GlobalLogoBarWithFallback";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 export default function RootLayout() {
   return (
@@ -11,6 +12,7 @@ export default function RootLayout() {
         <View style={styles.content}>
           <Stack screenOptions={{ headerShown: false }} />
         </View>
+        {Platform.OS === "web" && <SpeedInsights />}
       </View>
     </TelegramProvider>
   );

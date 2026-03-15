@@ -374,7 +374,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     interruptedReplyCallback = sendInterruptedReply;
 
     // Start with rotating typing indicator instead of static "…"
-    const typingFrames = ["\\", "/", "-", "|"];
+    const typingFrames = ["\\", "/"];
     let typingIndex = 0;
 
     await sendOrEditOnce(typingFrames[typingIndex], typingFrames[typingIndex]);

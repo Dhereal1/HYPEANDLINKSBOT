@@ -14,6 +14,7 @@ export type TelegramWebApp = {
   expand?: () => void;
   setHeaderColor?: (color: string) => void;
   setupSwipeBehavior?: (opts: { allow_vertical_swipe?: boolean }) => void;
+  disableVerticalSwipes?: () => void;
   isFullscreen?: boolean;
   HapticFeedback?: { impactOccurred?: (style: string) => void };
   [k: string]: unknown;
@@ -63,7 +64,7 @@ export function isAvailable(): boolean {
 
 /** Load Telegram Web App script if missing (script is not auto-injected; page must include or load it). */
 export function ensureTelegramScript(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || typeof document === "undefined") return;
   if ((window as Window).Telegram?.WebApp) return;
   if (document.querySelector('script[src*="telegram.org/js/telegram-web-app"]')) return;
 
@@ -147,6 +148,7 @@ export function readyAndExpand(): void {
     app.setHeaderColor?.("#000000");
     const opts = { allow_vertical_swipe: false };
     app.setupSwipeBehavior?.(opts);
+    app.disableVerticalSwipes?.(); // legacy API; setupSwipeBehavior is preferred
   } catch {
     // ignore
   }

@@ -1,16 +1,55 @@
 /**
  * Telegram webhook handler for /api/bot (serverless).
- * Lives under app/bot; api/bot.ts imports this so Vercel only sees one route.
+ *
+ * Flow:
+ * - User sends a message in Telegram → Telegram POSTs that update here.
+ * - We return 200 OK immediately so Telegram does not retry or hide the user's message.
+ * - We process the update in the background (waitUntil).
+ *
+ * Per-chat serialization: we process one update per chat at a time. When a new update arrives
+ * for a chat, we wait for the previous handler for that chat to finish, then run the new one.
+ * So Reply A is always sent before we start processing Prompt B — no reorder flash.
  */
 
+import { waitUntil } from '@vercel/functions';
 import { createBot } from './grammy.js';
 
 interface TelegramUpdate {
   update_id: number;
+  message?: { chat?: { id?: number }; [key: string]: unknown };
+  edited_message?: { chat?: { id?: number }; [key: string]: unknown };
+  channel_post?: { chat?: { id?: number }; [key: string]: unknown };
+  callback_query?: { message?: { chat?: { id?: number } }; [key: string]: unknown };
   [key: string]: unknown;
 }
 
+/** Extract chat id from update so we can serialize processing per chat and avoid reply order flash. */
+function getChatIdFromUpdate(update: TelegramUpdate): number | undefined {
+  const msg = update.message ?? update.edited_message ?? update.channel_post;
+  if (msg && typeof msg === 'object' && msg.chat && typeof (msg.chat as { id?: number }).id === 'number') {
+    return (msg.chat as { id: number }).id;
+  }
+  const cq = update.callback_query;
+  if (cq && typeof cq === 'object' && cq.message && typeof (cq.message as { chat?: { id?: number } }).chat?.id === 'number') {
+    return (cq.message as { chat: { id: number } }).chat.id;
+  }
+  return undefined;
+}
+
+/** Per-chat tail promise: next update for this chat waits for the previous handler to finish. */
+const chatQueue = new Map<number, Promise<void>>();
+
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+/** Single bot instance for all webhook requests; created once at module load. */
+const bot = BOT_TOKEN ? createBot(BOT_TOKEN) : null;
+/** Lazy init: run bot.init() once on first use; later requests reuse the same promise. */
+let botInitPromise: Promise<void> | null = null;
+function ensureBotInit(): Promise<void> {
+  if (!bot) return Promise.resolve();
+  if (!botInitPromise) botInitPromise = bot.init();
+  return botInitPromise;
+}
+
 // Vercel production alias (VERCEL_PROJECT_PRODUCTION_URL) or deployment URL (VERCEL_URL).
 const BASE_URL =
   process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -83,10 +122,12 @@ export async function handleRequest(request: Request): Promise<Response> {
   if (method !== 'POST') {
     return jsonResponse({ ok: false, error: 'method_not_allowed' }, 405);
   }
-  if (!BOT_TOKEN) {
+  if (!BOT_TOKEN || !bot) {
     return jsonResponse({ ok: false, error: 'BOT_TOKEN not set' }, 500);
   }
 
+  // Read body before returning 200. Once we return, the request may be closed and body
+  // unavailable, so reading it inside waitUntil can fail and the message is lost.
   let update: TelegramUpdate;
   try {
     const body =
@@ -98,23 +139,34 @@ export async function handleRequest(request: Request): Promise<Response> {
         ? (JSON.parse(body) as TelegramUpdate)
         : (body as TelegramUpdate);
   } catch {
+    console.error('[webhook] invalid_body');
     return jsonResponse({ ok: false, error: 'invalid_body' }, 400);
   }
   if (!update || typeof update !== 'object') {
-    return jsonResponse({ ok: false, error: 'invalid_body' }, 400);
+    console.error('[webhook] invalid update');
+    return jsonResponse({ ok: false, error: 'invalid_update' }, 400);
   }
 
+  // Return 200 OK immediately so Telegram applies the message to the chat. Process update
+  // in waitUntil so we don't block the response on AI/DB.
+  // Serialize per chat so Reply A is always sent before we start processing Prompt B.
   const updateId = update.update_id;
-  console.log('[webhook] POST update', updateId);
-  const bot = createBot(BOT_TOKEN);
-  try {
-    await bot.init();
-    await bot.handleUpdate(update);
-    console.log('[webhook] handled update', updateId);
-  } catch (err) {
-    console.error('[bot]', err);
-    return jsonResponse({ ok: false, error: 'handler_error' }, 500);
+  const chatId = getChatIdFromUpdate(update);
+  const prev = chatId !== undefined ? chatQueue.get(chatId) : undefined;
+  const work = (prev ?? Promise.resolve())
+    .then(() => ensureBotInit())
+    .then(() => bot!.handleUpdate(update as Parameters<typeof bot.handleUpdate>[0]))
+    .then(() => {
+      console.log('[webhook] handled update', updateId);
+    })
+    .catch((err) => {
+      console.error('[bot]', err);
+    });
+  const tail = work.then(() => {}, () => {});
+  if (chatId !== undefined) {
+    chatQueue.set(chatId, tail);
   }
+  waitUntil(work);
   return jsonResponse({ ok: true });
 }
 
@@ -165,7 +217,7 @@ async function legacyHandler(req: NodeReq, res: NodeRes): Promise<void> {
     res.status(405).json({ ok: false, error: 'method_not_allowed' });
     return;
   }
-  if (!BOT_TOKEN) {
+  if (!BOT_TOKEN || !bot) {
     res.status(500).json({ ok: false, error: 'BOT_TOKEN not set' });
     return;
   }
@@ -182,10 +234,15 @@ async function legacyHandler(req: NodeReq, res: NodeRes): Promise<void> {
     res.status(400).json({ ok: false, error: 'invalid_body' });
     return;
   }
-  const bot = createBot(BOT_TOKEN);
   try {
-    await bot.init();
-    await bot.handleUpdate(update);
+    await ensureBotInit();
+    const chatIdLegacy = getChatIdFromUpdate(update);
+    const prevLegacy = chatIdLegacy !== undefined ? chatQueue.get(chatIdLegacy) : undefined;
+    await (prevLegacy ?? Promise.resolve());
+    await bot.handleUpdate(update as Parameters<typeof bot.handleUpdate>[0]);
+    if (chatIdLegacy !== undefined) {
+      chatQueue.set(chatIdLegacy, Promise.resolve());
+    }
   } catch (err) {
     console.error('[bot]', err);
     res.status(500).json({ ok: false, error: 'handler_error' });

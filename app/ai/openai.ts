@@ -2,10 +2,23 @@ import OpenAI from "openai";
 
 export type AiMode = "chat" | "token_info";
 
+export type ThreadContext = {
+  user_telegram: string;
+  thread_id: number;
+  type: "bot" | "app";
+  telegram_update_id?: number | null;
+  /** When true, skip claim insert (e.g. same handler retrying token_info -> chat); still use history and persist assistant. */
+  skipClaim?: boolean;
+};
+
 export type AiRequestBase = {
   input: string;
   userId?: string;
   context?: Record<string, unknown>;
+  /** When set, AI layer persists user/assistant and uses thread history for chat. */
+  threadContext?: ThreadContext;
+  /** Optional instructions for the model (e.g. length limit); passed to OpenAI native `instructions` field. */
+  instructions?: string;
 };
 
 export type AiResponseBase = {
@@ -14,6 +27,8 @@ export type AiResponseBase = {
   output_text?: string;
   error?: string;
   mode: AiMode;
+  /** True when claim insert failed (another instance or duplicate); caller should not send. */
+  skipped?: boolean;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -57,6 +72,7 @@ export async function callOpenAiChat(
   try {
     const response = await client.responses.create({
       model: "gpt-5.2",
+      ...(params.instructions ? { instructions: params.instructions } : {}),
       input: `${prefix}${trimmed}`,
     });
 
@@ -84,7 +100,7 @@ export async function callOpenAiChatStream(
   mode: AiMode,
   params: AiRequestBase,
   onDelta: (text: string) => void | Promise<void>,
-  opts?: { isCancelled?: () => boolean },
+  opts?: { isCancelled?: () => boolean; getAbortSignal?: () => Promise<boolean> },
 ): Promise<AiResponseBase> {
   if (!client) {
     return {
@@ -113,17 +129,26 @@ export async function callOpenAiChatStream(
   try {
     const stream = client.responses.stream({
       model: "gpt-5.2",
+      ...(params.instructions ? { instructions: params.instructions } : {}),
       input: `${prefix}${trimmed}`,
     });
 
-    stream.on("response.output_text.delta", (event: { snapshot?: string }) => {
+    stream.on("response.output_text.delta", async (event: { snapshot?: string }) => {
       if (opts?.isCancelled && opts.isCancelled()) {
         try {
-          // Stop the stream on OpenAI's side to avoid spending more tokens.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (stream as any)?.abort?.();
         } catch {
-          // Ignore abort errors; we just stop processing locally.
+          /* ignore */
+        }
+        return;
+      }
+      if (opts?.getAbortSignal && (await opts.getAbortSignal())) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (stream as any)?.abort?.();
+        } catch {
+          /* ignore */
         }
         return;
       }

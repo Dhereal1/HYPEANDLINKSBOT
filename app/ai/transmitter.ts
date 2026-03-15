@@ -1,16 +1,70 @@
-import type { AiMode, AiRequestBase, AiResponseBase } from "./openai.js";
+import type { AiMode, AiRequestBase, AiResponseBase, ThreadContext } from "./openai.js";
 import { callOpenAiChat, callOpenAiChatStream } from "./openai.js";
 import {
   getTokenBySymbol,
   normalizeSymbol,
   type TokenSearchResult,
 } from "../blockchain/coffee.js";
+import {
+  insertMessage,
+  getThreadHistory,
+  type Message,
+} from "../database/messages.js";
 
 export type AiRequest = AiRequestBase & {
   mode?: AiMode;
 };
 
 export type AiResponse = AiResponseBase;
+
+const HISTORY_LIMIT = 50;
+
+function formatHistoryForInput(history: Message[]): string {
+  if (history.length === 0) return "";
+  const lines = history.map((m) => {
+    const role = m.role === "user" ? "user" : m.role === "assistant" ? "assistant" : "system";
+    const content = (m.content ?? "").trim();
+    return `${role}: ${content}`;
+  });
+  return "Previous conversation:\n" + lines.join("\n") + "\n\n";
+}
+
+/** Claim by insert; return skipped response if another instance won. */
+async function claimUserMessage(
+  thread: ThreadContext,
+  content: string,
+): Promise<AiResponse | null> {
+  const inserted = await insertMessage({
+    user_telegram: thread.user_telegram,
+    thread_id: thread.thread_id,
+    type: thread.type,
+    role: "user",
+    content,
+    telegram_update_id: thread.telegram_update_id ?? undefined,
+  });
+  if (inserted === null) {
+    return {
+      ok: false,
+      provider: "openai",
+      mode: "chat",
+      skipped: true,
+    };
+  }
+  return null;
+}
+
+async function persistAssistantMessage(
+  thread: ThreadContext,
+  content: string,
+): Promise<void> {
+  await insertMessage({
+    user_telegram: thread.user_telegram,
+    thread_id: thread.thread_id,
+    type: thread.type,
+    role: "assistant",
+    content,
+  });
+}
 
 function extractSymbolCandidate(input: string): string | null {
   const raw = input.trim();
@@ -132,6 +186,7 @@ async function handleTokenInfo(
       token,
       source: "swap.coffee",
     },
+    instructions: request.instructions,
   });
 
   return {
@@ -147,25 +202,58 @@ async function handleTokenInfo(
 
 export async function transmit(request: AiRequest): Promise<AiResponse> {
   const mode: AiMode = request.mode ?? "chat";
+  const thread = request.threadContext;
 
-  if (mode === "token_info") {
-    return handleTokenInfo(request);
+  if (thread && !thread.skipClaim) {
+    const skipped = await claimUserMessage(thread, request.input);
+    if (skipped) return skipped;
   }
 
-  return callOpenAiChat(mode, {
-    input: request.input,
+  if (mode === "token_info") {
+    const result = await handleTokenInfo(request);
+    if (result.ok && result.output_text && thread) {
+      await persistAssistantMessage(thread, result.output_text);
+    }
+    return result;
+  }
+
+  let input = request.input;
+  if (thread) {
+    const history = await getThreadHistory({
+      user_telegram: thread.user_telegram,
+      thread_id: thread.thread_id,
+      type: thread.type,
+      limit: HISTORY_LIMIT,
+    });
+    input = formatHistoryForInput(history) + "Current message:\nuser: " + request.input;
+  }
+
+  const result = await callOpenAiChat(mode, {
+    input,
     userId: request.userId,
     context: request.context,
+    instructions: request.instructions,
   });
+
+  if (result.ok && result.output_text && thread) {
+    await persistAssistantMessage(thread, result.output_text);
+  }
+  return result;
 }
 
 /** Stream AI response; onDelta(accumulatedText) is called for each chunk. Only the final OpenAI call is streamed. */
 export async function transmitStream(
   request: AiRequest,
   onDelta: (text: string) => void | Promise<void>,
-  opts?: { isCancelled?: () => boolean },
+  opts?: { isCancelled?: () => boolean; getAbortSignal?: () => Promise<boolean> },
 ): Promise<AiResponse> {
   const mode: AiMode = request.mode ?? "chat";
+  const thread = request.threadContext;
+
+  if (thread && !thread.skipClaim) {
+    const skipped = await claimUserMessage(thread, request.input);
+    if (skipped) return skipped;
+  }
 
   if (mode === "token_info") {
     const tokenResult = await (async () => {
@@ -229,11 +317,15 @@ export async function transmitStream(
           token,
           source: "swap.coffee",
         },
+        instructions: request.instructions,
       },
       onDelta,
       opts,
     );
 
+    if (result.ok && result.output_text && thread) {
+      await persistAssistantMessage(thread, result.output_text);
+    }
     return {
       ...result,
       mode: "token_info",
@@ -245,14 +337,31 @@ export async function transmitStream(
     };
   }
 
-  return callOpenAiChatStream(
+  let input = request.input;
+  if (thread) {
+    const history = await getThreadHistory({
+      user_telegram: thread.user_telegram,
+      thread_id: thread.thread_id,
+      type: thread.type,
+      limit: HISTORY_LIMIT,
+    });
+    input = formatHistoryForInput(history) + "Current message:\nuser: " + request.input;
+  }
+
+  const result = await callOpenAiChatStream(
     mode,
     {
-      input: request.input,
+      input,
       userId: request.userId,
       context: request.context,
+      instructions: request.instructions,
     },
     onDelta,
     opts,
   );
+
+  if (result.ok && result.output_text && thread) {
+    await persistAssistantMessage(thread, result.output_text);
+  }
+  return result;
 }

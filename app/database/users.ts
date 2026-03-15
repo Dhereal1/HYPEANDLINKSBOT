@@ -1,8 +1,8 @@
 /**
- * User helpers shared by API routes and local bot.
- * Lives under app/shared so route handlers import from ../shared (not under api/).
+ * User helpers for the users table. Shared by API routes and bot.
+ * Import from ../database/users.js (e.g. from api/, telegram/, bot/).
  */
-import { sql } from '../database/start.js';
+import { sql } from './start.js';
 
 export function normalizeUsername(raw: unknown): string {
   if (typeof raw !== 'string') return '';

@@ -7,6 +7,7 @@ import { View, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useTelegram } from "./Telegram";
 import { HyperlinksSpaceLogo } from "./HyperlinksSpaceLogo";
+import { useColors } from "../theme";
 
 const LOGO_HEIGHT = 32;
 const BOTTOM_PADDING = 10;
@@ -28,6 +29,7 @@ function useLogoTopPadding(
 
 export function GlobalLogoBar() {
   const router = useRouter();
+  const colors = useColors();
   const {
     isInTelegram,
     triggerHaptic,
@@ -50,11 +52,11 @@ export function GlobalLogoBar() {
   };
 
   if (!shouldShow) {
-    return <View style={[styles.container, { height: 0 }]} />;
+    return <View style={[styles.container, { height: 0, backgroundColor: colors.background }]} />;
   }
 
   return (
-    <View style={[styles.container, { height: blockHeight }]}>
+    <View style={[styles.container, { height: blockHeight, backgroundColor: colors.background }]}>
       <View
         style={[
           styles.inner,

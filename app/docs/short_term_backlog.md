@@ -3,7 +3,6 @@ Fonts
 Favicon
 check file's formats and folders structure
 Typing in the middle of the text on large inputting
-Mobile: Paste to botbar bug
 AI options Page
 AI Icon
 Fonts

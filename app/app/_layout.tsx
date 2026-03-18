@@ -5,6 +5,7 @@ import { TelegramProvider } from "./components/Telegram";
 import { GlobalLogoBarWithFallback } from "./components/GlobalLogoBarWithFallback";
 import { GlobalBottomBar } from "./components/GlobalBottomBar";
 import { GlobalBottomBarWeb } from "./components/GlobalBottomBarWeb";
+import { useColors } from "./theme";
 
 /**
  * Three-block column layout (same as Flutter):
@@ -14,8 +15,9 @@ import { GlobalBottomBarWeb } from "./components/GlobalBottomBarWeb";
  * 4. AI & Search bar (fixed at bottom)
  */
 export default function RootLayout() {
+  const colors = useColors();
   const content = (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <GlobalLogoBarWithFallback />
       <View style={styles.main}>
         <Stack screenOptions={{ headerShown: false }} />

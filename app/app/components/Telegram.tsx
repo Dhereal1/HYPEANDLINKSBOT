@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { init, on, viewport } from "@tma.js/sdk-react";
+import { on as onBridge } from "@tma.js/bridge";
 import {
   ensureTelegramScript,
   getInitDataString,
@@ -135,6 +136,161 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     console.log("[TMA theme] classify", { bgColor, luminance, scheme });
     return scheme;
   }
+
+  // Live theme updates: update `colorScheme` whenever Telegram changes theme.
+  // This is what makes our React UI (logo bar / backgrounds) repaint without reload.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cleanupSdk: (() => void) | undefined;
+    let cleanupBridge: (() => void) | undefined;
+    let cleanupNative: (() => void) | undefined;
+
+    function updateScheme(next: "dark" | "light") {
+      setColorScheme((prev) => {
+        if (prev === next) return prev;
+        // eslint-disable-next-line no-console
+        console.log("[TMA theme] update colorScheme", { from: prev, to: next });
+        return next;
+      });
+    }
+
+    function computeSchemeFromPayload(payload: unknown): void {
+      const anyPayload = payload as unknown as {
+        color_scheme?: string;
+        theme_params?: Record<string, string>;
+      } | null;
+
+      const explicit = anyPayload?.color_scheme;
+      if (explicit === "dark" || explicit === "light") {
+        updateScheme(explicit);
+        return;
+      }
+
+      const tp = anyPayload?.theme_params;
+      const bg =
+        tp?.bg_color ?? tp?.secondary_bg_color ?? tp?.section_bg_color;
+      const scheme = classifyThemeFromBgColor(bg);
+      updateScheme(scheme);
+    }
+
+    // Attach SDK-react + bridge listeners (event name is the same in both).
+    // These should fire on theme changes while the Mini App is open.
+    try {
+      ensureSdkInitialized();
+      cleanupSdk = on("theme_changed", (payload) => computeSchemeFromPayload(payload));
+    } catch {
+      // ignore
+    }
+
+    try {
+      cleanupBridge = onBridge("theme_changed", (payload) =>
+        computeSchemeFromPayload(payload),
+      );
+    } catch {
+      // ignore
+    }
+
+    // Native Telegram event: WebApp.onEvent('themeChanged', ...)
+    // Telegram may inject WebApp asynchronously, so we poll briefly.
+    const POLL_MS = 100;
+    const POLL_MAX = 50; // 5s
+    let pollCount = 0;
+    const intervalId = window.setInterval(() => {
+      pollCount += 1;
+      try {
+        if (!isLikelyInTma()) return;
+        const tg = (window as unknown as { Telegram?: { WebApp?: unknown } }).Telegram;
+        const app = tg?.WebApp as unknown as {
+          onEvent?: unknown;
+          offEvent?: unknown;
+        } | null;
+
+        const onEvent = app?.onEvent;
+        if (typeof onEvent !== "function") return;
+
+        // Ensure we attach only once.
+        if (cleanupNative) return;
+
+        const handler = () => {
+          const tp = getInitialThemeParams();
+          const bg =
+            tp?.bg_color ?? tp?.secondary_bg_color ?? tp?.section_bg_color;
+          const scheme = classifyThemeFromBgColor(bg);
+          updateScheme(scheme);
+        };
+
+        (onEvent as unknown as (eventType: string, cb: () => void) => void)(
+          "themeChanged",
+          handler,
+        );
+
+        const offEvent = app?.offEvent;
+        cleanupNative = () => {
+          try {
+            if (typeof offEvent === "function") {
+              (offEvent as unknown as (eventType: string, cb: () => void) => void)(
+                "themeChanged",
+                handler,
+              );
+            }
+          } catch {
+            // ignore
+          }
+        };
+      } catch {
+        // ignore
+      }
+
+      if (pollCount >= POLL_MAX) {
+        window.clearInterval(intervalId);
+      }
+    }, POLL_MS);
+
+    // Short last-resort poll: if event wiring fails in some environments,
+    // still converge to the right scheme quickly.
+    const POLL_SCHEME_MS = 500;
+    const POLL_SCHEME_MAX = 20; // 10s
+    let schemePoll = 0;
+    const schemeIntervalId = window.setInterval(() => {
+      schemePoll += 1;
+      try {
+        if (!isLikelyInTma()) return;
+        const tp = getInitialThemeParams();
+        const bg =
+          tp?.bg_color ?? tp?.secondary_bg_color ?? tp?.section_bg_color;
+        const scheme = classifyThemeFromBgColor(bg);
+        updateScheme(scheme);
+      } catch {
+        // ignore
+      }
+
+      if (schemePoll >= POLL_SCHEME_MAX) {
+        window.clearInterval(schemeIntervalId);
+      }
+    }, POLL_SCHEME_MS);
+
+    return () => {
+      try {
+        cleanupSdk?.();
+      } catch {
+        // ignore
+      }
+      try {
+        cleanupBridge?.();
+      } catch {
+        // ignore
+      }
+      try {
+        cleanupNative?.();
+      } catch {
+        // ignore
+      }
+
+      window.clearInterval(intervalId);
+      window.clearInterval(schemeIntervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLikelyInTma()) return;

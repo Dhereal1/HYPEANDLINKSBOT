@@ -111,7 +111,14 @@ export function useTelegram() {
 }
 
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<TelegramStatus>("idle");
+  const [status, setStatus] = useState<TelegramStatus>(() => {
+    if (typeof window === "undefined") return "idle";
+    return isAvailable() ? "loading" : "dev";
+  });
+  const [isInTelegram, setIsInTelegram] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return isAvailable();
+  });
   const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debug, setDebug] = useState<TelegramDebugInfo>(defaultDebug);
@@ -137,7 +144,11 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   // Keep this as `false` on the very first render (SSR + client hydration),
   // because Telegram themeParams may arrive only after `web_app_request_theme`.
   // We will flip it to `true` only after we receive a valid bg_color.
-  const [themeBgReady, setThemeBgReady] = useState<boolean>(false);
+  const [themeBgReady, setThemeBgReady] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    // Outside Telegram we should render immediately with the default dark theme.
+    return !isAvailable();
+  });
 
   function classifyThemeFromBgColor(bgColor: string | undefined | null): "dark" | "light" {
     if (!bgColor || typeof bgColor !== "string") return "dark";
@@ -405,9 +416,22 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") {
       setDebug((d) => ({ ...d, hasWebApp: false, apiMessage: "no window" }));
       setStatus("dev");
+      setIsInTelegram(false);
+      setThemeBgReady(true);
       return;
     }
 
+    // Decide Telegram mode as early as possible.
+    // If unavailable now, treat as non-Telegram and render dark theme immediately.
+    if (!isAvailable()) {
+      setDebug((d) => ({ ...d, hasWebApp: false, apiMessage: "no WebApp (early detect)" }));
+      setStatus("dev");
+      setIsInTelegram(false);
+      setThemeBgReady(true);
+      return;
+    }
+
+    setIsInTelegram(true);
     setStatus("loading");
     ensureTelegramScript();
 
@@ -459,6 +483,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
           }
           setTelegramUsername(json.telegram_username ?? null);
           setStatus("ok");
+          setIsInTelegram(true);
         })
         .catch((e) => {
           clearTimeout(timeoutId);
@@ -480,6 +505,7 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
           setError(isTimeout ? "Request timed out" : (e?.message ?? "Failed to register Telegram user"));
           setStatus("error");
+          setIsInTelegram(true);
         });
     }
 
@@ -542,6 +568,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         clearInterval(webAppInterval);
         setDebug((d) => ({ ...d, apiMessage: "no WebApp (timeout)" }));
         setStatus("dev");
+        setIsInTelegram(false);
+        setThemeBgReady(true);
       }
     }, WEBAPP_POLL_MS);
 
@@ -550,8 +578,6 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       initPollCleanupRef.current?.();
     };
   }, []);
-
-  const isInTelegram = status !== "dev";
 
   const value: TelegramContextValue = {
     status,

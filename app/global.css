@@ -31,6 +31,13 @@ textarea::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 
+/* First paint-safe placeholder color for the web AI input.
+   Defaults to dark theme primary from theme.ts and can be overridden via CSS var. */
+[data-global-bottom-bar-web]::placeholder {
+  color: var(--ai-placeholder-color, #FAFAFA);
+  opacity: 1;
+}
+
 /* Make the AI & Search textarea truly 20px tall for one line */
 textarea[data-ai-input="true"] {
   min-height: 20px !important;

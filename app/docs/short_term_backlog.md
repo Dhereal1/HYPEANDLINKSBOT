@@ -1,3 +1,4 @@
+Close button in installer
 Theme with Web / TMA customization
 Fonts
 Favicon
@@ -10,12 +11,11 @@ AI Chat page
 
 Stop responce
 AI responce checkup in bot (message interruption on new prompt)
-Slash rotation, symbols and consiberations
 Min chars estimate
-App theme
 
 To think about:
 
+Theme switch when not in Telegram
 Selection and pointing text detalization
     on word tapping places at the end of the word
     zoom-in cursor placing on long tap

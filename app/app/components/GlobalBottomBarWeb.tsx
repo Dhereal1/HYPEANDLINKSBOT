@@ -35,39 +35,6 @@ export function GlobalBottomBarWeb() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const domMirrorRef = useRef<HTMLDivElement | null>(null);
 
-  // Hide native scrollbar for the textarea (same as we try for the main bar).
-  // Recreate the style tag whenever the primary color changes so the
-  // placeholder color follows the current theme.
-  useEffect(() => {
-    const styleId = "global-bottom-bar-web-style";
-    if (typeof document === "undefined") return;
-
-    const existing = document.getElementById(styleId);
-    if (existing) existing.remove();
-
-    const styleEl = document.createElement("style");
-    styleEl.id = styleId;
-    styleEl.textContent = `
-      [data-global-bottom-bar-web] {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-        background-color: transparent !important;
-      }
-      [data-global-bottom-bar-web]::-webkit-scrollbar {
-        width: 0;
-        height: 0;
-      }
-      [data-global-bottom-bar-web]::placeholder {
-        color: ${colors.primary};
-        opacity: 1;
-      }
-    `;
-    document.head.appendChild(styleEl);
-    return () => {
-      document.getElementById(styleId)?.remove();
-    };
-  }, [colors.primary]);
-
   const measureAndResize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -270,6 +237,7 @@ export function GlobalBottomBarWeb() {
               onBlur={() => setIsFocused(false)}
               rows={1}
               style={{
+                ["--ai-placeholder-color" as any]: colors.primary,
                 width: "100%",
                 // Keep the DOM min/height/max in sync with our computed
                 // dynamicHeight so there is no intermediate smaller box

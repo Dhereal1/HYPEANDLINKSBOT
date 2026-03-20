@@ -36,7 +36,7 @@
   },
   "build": {
     "appId": "com.sraibaby.app",
-    "productName": "Hyperlinks Space App",
+    "productName": "Hyperlinks Space App Installation",
     "asar": false,
     "extraMetadata": {
       "main": "windows/build.cjs"
@@ -48,13 +48,11 @@
     ],
     "win": {
       "icon": "assets/icon.ico",
-      "executableName": "HyperlinksSpaceApp",
       "target": [{ "target": "nsis", "arch": ["x64"] }]
     },
     "nsis": {
       "artifactName": "HyperlinksSpaceAppInstaller.${ext}",
       "shortcutName": "Hyperlinks Space App",
-      "runAfterFinish": true,
       "include": "windows/installer.nsh"
     },
     "directories": {

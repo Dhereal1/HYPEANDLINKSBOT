@@ -35,8 +35,7 @@ export default function RootLayout() {
 
 function RootContent() {
   const colors = useColors();
-  const { themeBgReady, isInTelegram } = useTelegram();
-  const shouldHideUntilTheme = isInTelegram && !themeBgReady;
+  const { themeBgReady } = useTelegram();
   const backgroundColor = themeBgReady ? colors.background : "transparent";
 
   return (
@@ -45,9 +44,9 @@ function RootContent() {
         styles.root,
         {
           backgroundColor,
-          opacity: shouldHideUntilTheme ? 0 : 1,
+          opacity: themeBgReady ? 1 : 0,
           // Prevent dark-theme flicker from being interactable before Telegram theme arrives.
-          pointerEvents: shouldHideUntilTheme ? "none" : "auto",
+          pointerEvents: themeBgReady ? "auto" : "none",
         },
       ]}
     >

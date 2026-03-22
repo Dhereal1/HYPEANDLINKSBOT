@@ -46,11 +46,13 @@ textarea[data-ai-input="true"] {
   box-sizing: content-box;
 }
 
-/* GlobalBottomBarWeb: placeholder uses CSS var set inline (sync with Telegram launch theme). */
+/* GlobalBottomBarWeb: placeholder + same font stack as inline (see app/fonts.ts). */
 [data-global-bottom-bar-web] {
   -ms-overflow-style: none;
   scrollbar-width: none;
   background-color: transparent !important;
+  font-family: Aeroport, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif !important;
 }
 
 [data-global-bottom-bar-web]::-webkit-scrollbar {

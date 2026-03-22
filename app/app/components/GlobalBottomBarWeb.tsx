@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useTelegram } from "./Telegram";
 import { getPrimaryTextColorFromLaunch } from "./telegramWebApp";
+import { WEB_UI_SANS_STACK } from "../fonts";
 import { layout, icons, useColors } from "../theme";
 
 const { maxContentWidth } = layout;
@@ -263,7 +264,7 @@ export function GlobalBottomBarWeb() {
                 backgroundColor: "transparent",
                 caretColor: inputColor,
                 ["--ai-placeholder-color" as string]: inputColor,
-                fontFamily: "Aeroport",
+                fontFamily: WEB_UI_SANS_STACK,
                 // Allow scroll exactly when content exceeds the visible viewport height.
                 overflow: contentHeightWithGaps > viewportHeight ? "auto" : "hidden",
               }}

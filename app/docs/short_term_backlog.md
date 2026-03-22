@@ -1,5 +1,9 @@
-Theme with Web / TMA customization
+Placeholder refactor
+Username from start
+Bottom bar refactor
+Logo bar visibility
 Fonts
+Theme with Web / TMA customization
 Favicon
 check file's formats and folders structure
 Typing in the middle of the text on large inputting

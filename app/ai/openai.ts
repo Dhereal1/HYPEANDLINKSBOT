@@ -226,9 +226,5 @@ export async function callOpenAiChatStream(
       mode,
       error: message,
     };
-  } finally {
-    if (opts?.signal && onAbort) {
-      opts.signal.removeEventListener("abort", onAbort);
-    }
   }
 }

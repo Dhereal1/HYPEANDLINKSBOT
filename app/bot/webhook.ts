@@ -39,17 +39,17 @@ function getChatIdFromUpdate(update: TelegramUpdate): number | undefined {
 /** Per-thread tail promise: next update for this thread waits for the previous handler to finish. */
 const threadQueue = new Map<string, Promise<void>>();
 
-function getThreadKey(update: TelegramUpdate): string | undefined {
+function getThreadKey(update: any): string | undefined {
   const chatId = getChatIdFromUpdate(update);
   if (!chatId) return;
 
   const userId =
-    update.message?.from?.id ??
-    update.callback_query?.from?.id;
+    update?.message?.from?.id ??
+    update?.callback_query?.from?.id;
 
   const threadId =
-    update.message?.message_thread_id ??
-    update.callback_query?.message?.message_thread_id ??
+    update?.message?.message_thread_id ??
+    update?.callback_query?.message?.message_thread_id ??
     0;
 
   if (!userId) return;

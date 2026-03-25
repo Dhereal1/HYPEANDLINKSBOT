@@ -3,11 +3,8 @@ name: Windows release (CI build)
 
 on:
   workflow_dispatch:
-    inputs:
-      release_id:
-        description: "Git tag / release id, e.g. build_03252026_1929. Leave empty to auto-name from build time."
-        required: false
-        default: ""
+    # No manual inputs: release tag/build folder id is computed from current UTC time.
+    # Format: build_MMDDYYYY_HHMM (e.g. build_03252026_1929)
 
 permissions:
   contents: write
@@ -38,22 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve release id (optional)
+      - name: Compute release_id from UTC time
         id: meta
+        shell: bash
         run: |
           set -euo pipefail
-          rid="${{ inputs.release_id }}"
-          rid="${rid//[[:space:]]/}"
-          if [[ -n "$rid" ]]; then
-            if [[ ! "$rid" =~ ^build_[0-9]{8}_[0-9]{4}$ ]]; then
-              echo "release_id must look like build_MMDDYYYY_HHMM (e.g. build_03252026_1929)"
-              exit 1
-            fi
-            echo "release_id=$rid" >> "$GITHUB_OUTPUT"
-            echo "RELEASE_BUILD_ID=$rid" >> "$GITHUB_ENV"
-          else
-            echo "release_id=" >> "$GITHUB_OUTPUT"
-          fi
+          rid="build_$(date -u +%m%d%Y_%H%M)"
+          echo "release_id=$rid" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_BUILD_ID=$rid" >> "$GITHUB_ENV"
 
       - name: Build Windows installer
         run: npm run build:win
@@ -62,26 +51,12 @@ jobs:
         id: artifact
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          candidates=()
-          while IFS= read -r line; do
-            [[ -n "$line" ]] && candidates+=("$line")
-          done < <(ls -1 releases/build_*/HyperlinksSpaceAppInstaller.exe 2>/dev/null | sort)
-          if [[ ${#candidates[@]} -eq 0 ]]; then
-            echo "No HyperlinksSpaceAppInstaller.exe under releases/build_*/"
-            find releases -maxdepth 4 -type f 2>/dev/null || true
+          rid="${{ steps.meta.outputs.release_id }}"
+          exe="releases/$rid/HyperlinksSpaceAppInstaller.exe"
+          if [[ ! -f "$exe" ]]; then
+            echo "Expected $exe after build (set RELEASE_BUILD_ID=$rid)."
+            find releases -maxdepth 5 -type f 2>/dev/null || true
             exit 1
-          fi
-          exe="${candidates[${#candidates[@]}-1]}"
-          folder="$(dirname "$exe")"
-          rid="$(basename "$folder")"
-          if [[ -n "${{ steps.meta.outputs.release_id }}" ]]; then
-            rid="${{ steps.meta.outputs.release_id }}"
-            exe="releases/$rid/HyperlinksSpaceAppInstaller.exe"
-            if [[ ! -f "$exe" ]]; then
-              echo "Expected $exe after build"
-              exit 1
-            fi
           fi
           echo "exe_path=$exe" >> "$GITHUB_OUTPUT"
           echo "release_id=$rid" >> "$GITHUB_OUTPUT"

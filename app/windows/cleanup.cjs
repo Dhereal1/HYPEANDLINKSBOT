@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const appDir = path.join(__dirname, "..");
 const releasesDir = path.join(appDir, "releases");
@@ -75,9 +76,32 @@ moveIfExists(exeSrc, exeDest);
 const latestSrc = path.join(artifactsDir, latestYmlName);
 const latestDest = path.join(buildDir, latestYmlName);
 if (!moveIfExists(latestSrc, latestDest)) {
-  console.warn(
-    "No latest.yml in releases/artifacts/ — Windows auto-update will not work until electron-builder produces it.",
-  );
+  console.warn("No latest.yml in releases/artifacts/ — generating one for electron-updater.");
+}
+
+/** NSIS update metadata; electron-builder sometimes omits this unless publishing. */
+function writeLatestYmlForExe(exePath, ymlPath) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(appDir, "package.json"), "utf8"));
+  const version = String(pkg.version ?? "0.0.0");
+  const buf = fs.readFileSync(exePath);
+  const sha512 = crypto.createHash("sha512").update(buf).digest("base64");
+  const size = buf.length;
+  const releaseDate = new Date().toISOString();
+  const yml =
+    `version: ${version}\n` +
+    `files:\n` +
+    `  - url: ${exeName}\n` +
+    `    sha512: ${sha512}\n` +
+    `    size: ${size}\n` +
+    `path: ${exeName}\n` +
+    `sha512: ${sha512}\n` +
+    `releaseDate: '${releaseDate}'\n`;
+  fs.writeFileSync(ymlPath, yml, "utf8");
+  console.log("Wrote:", path.relative(appDir, ymlPath));
+}
+
+if (fs.existsSync(exeDest) && !fs.existsSync(latestDest)) {
+  writeLatestYmlForExe(exeDest, latestDest);
 }
 
 // Move optional/debug artifacts into dev/

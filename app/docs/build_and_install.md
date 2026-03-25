@@ -9,6 +9,12 @@ cd /d C:\1\1\1\1\1\HyperlinksSpaceBot\app
 npm run build:win:verbose
 ```
 
+Exe bash run example:
+
+```
+powershell -NoProfile -Command "Start-Process -FilePath 'C:/1/1/1/1/1/HyperlinksSpaceBot/app/releases/build_03252026_1449/HyperlinksSpaceAppInstaller.exe'"
+```
+
 ---
 
 ## 1. Build process

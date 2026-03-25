@@ -110,10 +110,15 @@ function createWindow() {
     return;
   }
 
+  // NSIS close-app uses PRODUCT_NAME (package.json → build.productName). The window title must
+  // match that string, not a URL — otherwise the installer cannot find/close the running app.
+  // Keep in sync with app/package.json "build.productName".
+  const windowTitle = isDev ? "http://www.hyperlinks.space/" : "Hyperlinks Space App";
+
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: "http://www.hyperlinks.space/",
+    title: windowTitle,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       nodeIntegration: false,
@@ -128,7 +133,7 @@ function createWindow() {
 
   mainWindow.webContents.on("page-title-updated", (e) => {
     e.preventDefault();
-    mainWindow.setTitle("http://www.hyperlinks.space/");
+    mainWindow.setTitle(windowTitle);
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, code, errMsg, url) => {

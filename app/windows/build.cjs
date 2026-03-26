@@ -68,12 +68,33 @@ function setupAutoUpdater() {
     function scheduleRelaunchFallback() {
       try {
         const exePath = app.getPath("exe");
-        // Interactive installer may not relaunch on some machines; schedule a delayed reopen.
-        const relaunchCmd = `ping 127.0.0.1 -n 26 > nul && start "" "${exePath}"`;
-        const child = spawn(process.env.ComSpec || "cmd.exe", ["/c", relaunchCmd], {
+        // Interactive installer may not relaunch on some machines.
+        // Open a visible PowerShell tracker so progress is observable.
+        const escapedExe = exePath.replace(/'/g, "''");
+        const relaunchScript = [
+          `$exe = '${escapedExe}'`,
+          "Write-Host '[Updater] Waiting for installer to complete...' -ForegroundColor Cyan",
+          "for ($left = 45; $left -gt 0; $left -= 5) {",
+          "  Write-Host (\"[Updater] Relaunch in {0}s\" -f $left)",
+          "  Start-Sleep -Seconds 5",
+          "}",
+          "if (-not (Test-Path $exe)) { Write-Host '[Updater] App executable not found.' -ForegroundColor Red; exit 1 }",
+          "for ($attempt = 1; $attempt -le 12; $attempt++) {",
+          "  try {",
+          "    Start-Process -FilePath $exe",
+          "    Write-Host '[Updater] App relaunched.' -ForegroundColor Green",
+          "    exit 0",
+          "  } catch {",
+          "    Write-Host (\"[Updater] Relaunch attempt {0}/12 failed, retrying...\" -f $attempt) -ForegroundColor Yellow",
+          "    Start-Sleep -Seconds 5",
+          "  }",
+          "}",
+          "Write-Host '[Updater] Relaunch failed after retries.' -ForegroundColor Red",
+        ].join("; ");
+        const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", relaunchScript], {
           detached: true,
           stdio: "ignore",
-          windowsHide: true,
+          windowsHide: false,
         });
         child.unref();
         log("[updater] scheduled relaunch fallback");

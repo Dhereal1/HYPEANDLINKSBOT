@@ -5,6 +5,21 @@ const { pathToFileURL } = require("url");
 
 const isDev = process.env.NODE_ENV === "development";
 
+function resolveNotificationIcon() {
+  const candidates = [
+    path.join(process.resourcesPath || "", "assets", "icon.ico"),
+    path.join(app.getAppPath(), "assets", "icon.ico"),
+    app.getPath("exe"),
+  ].filter(Boolean);
+  return candidates.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
 // One running instance on Windows: avoids two Electron processes during NSIS upgrade.
 if (!isDev && process.platform === "win32") {
   const gotLock = app.requestSingleInstanceLock();
@@ -64,9 +79,11 @@ function setupAutoUpdater() {
     autoUpdater.on("update-downloaded", () => {
       log("[updater] update-downloaded");
       if (Notification.isSupported()) {
+        const icon = resolveNotificationIcon();
         const note = new Notification({
           title: "Update ready",
           body: "A new version was downloaded. Click to restart and install.",
+          icon,
           silent: false,
         });
         note.on("click", requestInstallNow);
@@ -202,6 +219,9 @@ process.on("uncaughtException", (err) => {
 });
 
 app.whenReady().then(() => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("com.sraibaby.app");
+  }
   Menu.setApplicationMenu(null); // We can enable standart app menu by deteng this line
   if (!isDev) {
     const appPath = app.getAppPath();

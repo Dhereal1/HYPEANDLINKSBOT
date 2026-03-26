@@ -52,13 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           rid="${{ steps.meta.outputs.release_id }}"
-          exe="releases/$rid/HyperlinksSpaceAppInstaller.exe"
-          if [[ ! -f "$exe" ]]; then
-            echo "Expected $exe after build (set RELEASE_BUILD_ID=$rid)."
+          exe="$(ls -1 "releases/$rid"/HyperlinksSpaceAppInstaller_*.exe 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$exe" || ! -f "$exe" ]]; then
+            echo "Expected timestamped installer in releases/$rid (set RELEASE_BUILD_ID=$rid)."
             find releases -maxdepth 5 -type f 2>/dev/null || true
             exit 1
           fi
+          exe_name="$(basename "$exe")"
           echo "exe_path=$exe" >> "$GITHUB_OUTPUT"
+          echo "exe_name=$exe_name" >> "$GITHUB_OUTPUT"
           echo "release_id=$rid" >> "$GITHUB_OUTPUT"
 
       - name: Check if GitHub release already exists
@@ -105,7 +107,7 @@ jobs:
           WEBHOOK_TOKEN: ${{ secrets.RELEASE_WEBHOOK_TOKEN }}
           RELEASE_ID: ${{ steps.artifact.outputs.release_id }}
           RELEASE_URL: ${{ steps.create.outputs.release_url }}
-          EXE_NAME: HyperlinksSpaceAppInstaller.exe
+          EXE_NAME: ${{ steps.artifact.outputs.exe_name }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail

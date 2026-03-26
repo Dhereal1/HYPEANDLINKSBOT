@@ -8,7 +8,7 @@
     "url": "https://github.com/HyperlinksSpace/HyperlinksSpaceBot.git"
   },
   "main": "expo-router/entry",
-  "version": "53.0.63",
+  "version": "53.0.71",
   "type": "module",
   "engines": {
     "node": ">=18 <=22"
@@ -62,7 +62,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "HyperlinksSpaceAppInstaller.${ext}",
+      "artifactName": "HyperlinksSpaceAppInstaller_${env.BUILD_STAMP}.${ext}",
       "shortcutName": "Hyperlinks Space App",
       "include": "windows/installer.nsh",
       "guid": "5e1f4a8d-9c64-4e6a-a7d1-2a2fd2f01b0f",

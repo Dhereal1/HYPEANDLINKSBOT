@@ -41,7 +41,14 @@
   "build": {
     "appId": "com.sraibaby.app",
     "productName": "Hyperlinks Space App",
-    "asar": true,
+    "asar": {
+      "smartUnpack": true
+    },
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.dll",
+      "**/*.exe"
+    ],
     "extraMetadata": {
       "main": "windows/build.cjs"
     },

@@ -7,6 +7,10 @@ CRCCheck off
   Caption "${PRODUCT_NAME}"
 !macroend
 
-; Do not override customCheckAppRunning: the default warns if the app is still running.
-; An empty macro used to skip that check and led to "Failed to uninstall old application files"
-; when the installer ran while Electron still had files open (e.g. after clicking an update toast).
+; Override process check to use quoted SYSTEMROOT-based tool paths.
+; This matches a community workaround for path handling inconsistencies.
+!macro customCheckAppRunning
+  !define SYSTEMROOT "$%SYSTEMROOT%"
+  nsExec::Exec '"${SYSTEMROOT}\System32\cmd.exe" /c tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${_FILE}" /FO csv | "${SYSTEMROOT}\System32\find.exe" "${_FILE}"'
+  Pop $R0
+!macroend

@@ -7,7 +7,7 @@
 
 ---
 
-**messages** (single table, not implemented yet)
+**messages** (single table, implemented)
 
 - `id` (PK, BIGSERIAL) — same as other tables (e.g. wallets).
 - `created_at` (TIMESTAMPTZ, NOT NULL DEFAULT now()).
@@ -31,4 +31,3 @@
 3. No extra tables.
 
 **Migrations**
-

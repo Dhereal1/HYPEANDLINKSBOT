@@ -2,7 +2,6 @@ import type { Context } from "grammy";
 import { normalizeSymbol } from "../blockchain/coffee.js";
 import { transmit, transmitStream } from "../ai/transmitter.js";
 import { normalizeUsername } from "../database/users.js";
-import { getMaxTelegramUpdateIdForThread, insertMessage } from "../database/messages.js";
 import {
   closeOpenTelegramHtml,
   mdToTelegramHtml,
@@ -96,11 +95,6 @@ const EDIT_THROTTLE_MS = 500;
 /** If content grew by more than this many chars, edit immediately so long tail doesn't stick. */
 const EDIT_MIN_CHARS_TO_SEND_NOW = 20;
 
-/** Track latest generation per chat so newer messages cancel older streams. */
-const chatGenerations = new Map<number, number>();
-/** Track active stream abort controllers per thread key. */
-const activeControllers = new Map<string, AbortController>();
-
 type BotSourceContext = {
   source: "bot";
   username?: string | null;
@@ -184,50 +178,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   /** When streaming we send one message early then edit it; used to detect streaming path. */
   let streamSentMessageId: number | null = null;
 
-  const numericChatId =
-    typeof chatId === "number" ? chatId : undefined;
-  const threadKey =
-    threadContext
-      ? `bot:${threadContext.user_telegram}:${threadContext.thread_id}`
-      : numericChatId !== undefined
-        ? `chat:${numericChatId}`
-        : null;
-  const abortController = new AbortController();
-  if (threadKey) {
-    const prev = activeControllers.get(threadKey);
-    if (prev) {
-      console.log("[cancel] aborting previous stream", { threadKey });
-      prev.abort();
-    }
-    abortController.signal.addEventListener("abort", () => {
-      console.log("[cancel] stream aborted", { threadKey });
-    });
-    activeControllers.set(threadKey, abortController);
-  }
-  try {
-  let generation = 0;
-  if (numericChatId !== undefined) {
-    const prev = chatGenerations.get(numericChatId) ?? 0;
-    generation = prev + 1;
-    chatGenerations.set(numericChatId, generation);
-  }
-  const isCancelled = (): boolean =>
-    numericChatId !== undefined &&
-    chatGenerations.get(numericChatId) !== generation;
-
-  const shouldAbortSend = async (): Promise<boolean> => {
-    if (!threadContext) return false;
-    const max = await getMaxTelegramUpdateIdForThread(
-      threadContext.user_telegram,
-      threadContext.thread_id,
-      "bot",
-    );
-    return max !== null && max !== threadContext.telegram_update_id;
-  };
-
   let result: Awaited<ReturnType<typeof transmit>>;
-  /** Set in streaming path; when cancelled send partial and persist. When aborted by newer message, persist only (no send) to avoid flash. */
-  let interruptedReplyCallback: ((opts: { sendToChat: boolean }) => Promise<void>) | null = null;
 
   if (canStream && chatId !== undefined) {
     let sentMessageId: number | null = null;
@@ -236,63 +187,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     let pending: string | null = null;
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
     let editsDisabled = false;
-    /** Latest accumulated text from stream; used for interrupted reply and persist. */
-    let streamedAccumulated = "";
-
-    /** When turn is interrupted: message already exists (we sent early); optionally final edit, always persist. HTML only (format pipeline is strict). */
-    const sendInterruptedReply = async (opts: { sendToChat: boolean }): Promise<void> => {
-      const content = streamedAccumulated.trim();
-      if (abortController.signal.aborted) {
-        if (threadContext && content.length > 0) {
-          await insertMessage({
-            user_telegram: threadContext.user_telegram,
-            thread_id: threadContext.thread_id,
-            type: "bot",
-            role: "assistant",
-            content,
-          });
-        }
-        return;
-      }
-      if (sentMessageId !== null && content.length > 0) {
-        const toEdit = truncateTelegramHtmlSafe(
-          closeOpenTelegramHtml(
-            stripUnpairedMarkdownDelimiters(mdToTelegramHtml(content)),
-          ),
-          MAX_MESSAGE_TEXT_LENGTH,
-        );
-        try {
-          await ctx.api.editMessageText(chatId, sentMessageId, toEdit, { parse_mode: "HTML" });
-        } catch (e) {
-          console.error("[bot][edit] interrupted reply", (e as Error)?.message ?? e);
-        }
-      } else if (opts.sendToChat && content.length > 0) {
-        const toSend = truncateTelegramHtmlSafe(
-          closeOpenTelegramHtml(
-            stripUnpairedMarkdownDelimiters(mdToTelegramHtml(content)),
-          ),
-          MAX_MESSAGE_TEXT_LENGTH,
-        );
-        try {
-          await ctx.reply(toSend, replyOptionsWithHtml);
-        } catch (e) {
-          console.error("[bot][reply] interrupted", (e as Error)?.message ?? e);
-        }
-      } else if (opts.sendToChat && sentMessageId === null) {
-        try {
-          await ctx.reply("…", replyOptions);
-        } catch (_) {}
-      }
-      if (threadContext && content.length > 0) {
-        await insertMessage({
-          user_telegram: threadContext.user_telegram,
-          thread_id: threadContext.thread_id,
-          type: "bot",
-          role: "assistant",
-          content,
-        });
-      }
-    };
 
     /** One send (first) or edit in flight at a time so we never send multiple messages by race. */
     let sendOrEditQueue = Promise.resolve<void>(undefined);
@@ -309,9 +203,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     /** First call sends a message (claims message_id); later calls edit that message. HTML only; format pipeline is strict so Telegram accepts it. */
     const sendOrEditOnce = (formatted: string, _rawSlice: string): Promise<void> => {
       const run = async (): Promise<void> => {
-        if (abortController.signal.aborted) return;
-        if (await shouldAbortSend()) return;
-        if (isCancelled() || editsDisabled) return;
+        if (editsDisabled) return;
         const text = truncateTelegramHtmlSafe(formatted.trim() || "…", MAX_MESSAGE_TEXT_LENGTH);
         try {
           if (sentMessageId === null) {
@@ -355,8 +247,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     };
 
     const flushEdit = (awaitSend = false): void | Promise<void> => {
-      if (abortController.signal.aborted) return;
-      if (isCancelled()) return;
       if (pending === null) return;
       const slice = pending;
       pending = null;
@@ -374,9 +264,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
 
     const sendOrEdit = (accumulated: string): void => {
       stopTypingSpinner();
-      streamedAccumulated = accumulated;
-      if (abortController.signal.aborted) return;
-      if (isCancelled()) return;
       const slice = accumulated.length > MAX_MESSAGE_TEXT_LENGTH
         ? accumulated.slice(0, MAX_MESSAGE_TEXT_LENGTH)
         : accumulated;
@@ -416,16 +303,10 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       }
     };
 
-    interruptedReplyCallback = sendInterruptedReply;
-
     await sendOrEditOnce(typingFrames[typingIndex], typingFrames[typingIndex]);
 
     typingInterval = setInterval(() => {
       if (sentMessageId === null) return;
-      if (abortController.signal.aborted) {
-        stopTypingSpinner();
-        return;
-      }
       typingIndex = (typingIndex + 1) % typingFrames.length;
       ctx.api
         .editMessageText(chatId, sentMessageId, typingFrames[typingIndex])
@@ -435,11 +316,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       result = await transmitStream(
         { input: text, userId, context, mode, threadContext, instructions: TELEGRAM_BOT_LENGTH_INSTRUCTION },
         sendOrEdit,
-        {
-          signal: abortController.signal,
-          isCancelled,
-          getAbortSignal: async () => (await shouldAbortSend()) || isCancelled(),
-        },
       );
     } catch (e) {
       const errMsg = (e as Error)?.message ?? "AI streaming failed unexpectedly.";
@@ -457,11 +333,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       stopTypingSpinner();
       return;
     }
-    if (isCancelled()) {
-      stopTypingSpinner();
-      await sendInterruptedReply({ sendToChat: !(await shouldAbortSend()) });
-      return;
-    }
     if (throttleTimer) {
       clearTimeout(throttleTimer);
       throttleTimer = null;
@@ -474,10 +345,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       (!result.ok || !result.output_text) &&
       result.error?.includes("temporarily unavailable")
     ) {
-      if (isCancelled()) {
-        stopTypingSpinner();
-        return;
-      }
       lastEdited = "";
       try {
         result = await transmitStream(
@@ -490,11 +357,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
             instructions: TELEGRAM_BOT_LENGTH_INSTRUCTION,
           },
           sendOrEdit,
-          {
-            signal: abortController.signal,
-            isCancelled,
-            getAbortSignal: async () => (await shouldAbortSend()) || isCancelled(),
-          },
         );
       } catch (e) {
         const errMsg = (e as Error)?.message ?? "AI fallback streaming failed unexpectedly.";
@@ -510,11 +372,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       }
       if (result.skipped) {
         stopTypingSpinner();
-        return;
-      }
-      if (isCancelled()) {
-        stopTypingSpinner();
-        await sendInterruptedReply({ sendToChat: !(await shouldAbortSend()) });
         return;
       }
       if (throttleTimer) {
@@ -541,7 +398,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       );
       if (finalFormatted.trim()) {
         sendOrEditQueue = sendOrEditQueue.then(async () => {
-          if (abortController.signal.aborted) return;
           try {
             await ctx.api.editMessageText(chatId, streamSentMessageId!, finalFormatted, { parse_mode: "HTML" });
           } catch (e: unknown) {
@@ -562,18 +418,12 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   } else {
     result = await transmit({ input: text, userId, context, mode, threadContext, instructions: TELEGRAM_BOT_LENGTH_INSTRUCTION });
     if (result.skipped) return;
-    if (isCancelled()) {
-      return;
-    }
 
     if (
       mode === "token_info" &&
       (!result.ok || !result.output_text) &&
       result.error?.includes("temporarily unavailable")
     ) {
-      if (isCancelled()) {
-        return;
-      }
       result = await transmit({
         input: text,
         userId,
@@ -587,8 +437,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   }
 
   if (!result.ok || !result.output_text) {
-    if (await shouldAbortSend()) return;
-    if (isCancelled()) return;
     const errMsg = result.error ?? "AI returned no output.";
     console.error("[bot][ai]", errMsg);
     const message: string =
@@ -596,7 +444,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
         ? result.error
         : "AI is temporarily unavailable. Please try again in a moment.";
     if (streamSentMessageId !== null && chatId !== undefined) {
-      if (abortController.signal.aborted) return;
       try {
         await ctx.api.editMessageText(chatId, streamSentMessageId, message, {});
       } catch {
@@ -607,17 +454,6 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     }
     return;
   }
-
-  if (await shouldAbortSend() && interruptedReplyCallback) {
-    await interruptedReplyCallback({ sendToChat: false });
-    return;
-  }
-  if (await shouldAbortSend()) return;
-  if (isCancelled() && interruptedReplyCallback) {
-    await interruptedReplyCallback({ sendToChat: true });
-    return;
-  }
-  if (isCancelled()) return;
 
   // Streaming path: first message already has up to 4096. Send overflow as continuation if needed; then we're done.
   if (streamSentMessageId !== null && chatId !== undefined) {
@@ -660,10 +496,5 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   } else {
     const textToFormat = result.output_text.slice(0, MAX_MESSAGE_TEXT_LENGTH);
     await ctx.reply(textToFormat, replyOptions);
-  }
-  } finally {
-    if (threadKey && activeControllers.get(threadKey) === abortController) {
-      activeControllers.delete(threadKey);
-    }
   }
 }

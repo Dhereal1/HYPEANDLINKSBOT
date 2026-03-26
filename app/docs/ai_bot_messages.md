@@ -64,7 +64,7 @@
   `insertMessage({ user_telegram, thread_id, type: 'bot', role: 'user', content: text, telegram_update_id })`.
 - If `insertMessage` returns `null` (unique violation → another instance or duplicate webhook), **return without calling AI or replying** (so only one handler "owns" this update).
 
-**Where:** `responder.ts`, right after we have `text` and before we set up streaming/cancellation. Requires `user_telegram` and `update_id`; user must exist in `users` (grammy already upserts before calling the handler).
+**Where:** `responder.ts`, right after we have `text` and before we start streaming / sending drafts. Requires `user_telegram` and `update_id`; user must exist in `users` (grammy already upserts before calling the handler).
 
 ---
 
@@ -72,7 +72,7 @@
 
 - Before each **draft** send and before the **final reply**, call:
   `getMaxTelegramUpdateIdForThread(user_telegram, thread_id, 'bot')`.
-- If the returned max is not equal to our `update_id`, another instance has already processed a newer user message → **abort** (do not send draft or reply). Same idea as current in-memory `isCancelled()`, but DB-backed so it works across serverless instances.
+- If the returned max is not equal to our `update_id`, another instance has already processed a newer user message → **abort** (do not send draft or reply). This is a DB-backed alternative to an in-memory cancellation approach, so it works across serverless instances.
 
 **Where:** In `responder.ts`, inside `sendDraftOnce` / before `ctx.reply`: call the DB; if `max !== ourUpdateId`, treat as cancelled (return / skip send).
 

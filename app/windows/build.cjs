@@ -93,21 +93,13 @@ function setupAutoUpdater() {
           "Write-Host '[Updater] Press Enter to close this window.'",
           "[void][System.Console]::ReadLine()",
         ].join("; ");
-        const child = spawn(process.env.ComSpec || "cmd.exe", [
-          "/c",
-          "start",
-          "\"Updater Tracker\"",
-          "powershell.exe",
-          "-NoExit",
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          relaunchScript,
-        ], {
+        const startCmd =
+          `start "Updater Tracker" powershell.exe -NoExit -NoProfile ` +
+          `-ExecutionPolicy Bypass -Command "${relaunchScript.replace(/"/g, '\\"')}"`;
+        const child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", startCmd], {
           detached: true,
           stdio: "ignore",
-          windowsHide: true,
+          windowsHide: false,
         });
         child.unref();
         log("[updater] scheduled relaunch fallback");

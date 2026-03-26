@@ -69,7 +69,7 @@ function setupAutoUpdater() {
       try {
         const exePath = app.getPath("exe");
         // Interactive installer may not relaunch on some machines.
-        // Open a visible PowerShell tracker so progress is observable.
+        // Launch tracker via `start` so the console is independent from this process.
         const escapedExe = exePath.replace(/'/g, "''");
         const relaunchScript = [
           `$exe = '${escapedExe}'`,
@@ -90,11 +90,24 @@ function setupAutoUpdater() {
           "  }",
           "}",
           "Write-Host '[Updater] Relaunch failed after retries.' -ForegroundColor Red",
+          "Write-Host '[Updater] Press Enter to close this window.'",
+          "[void][System.Console]::ReadLine()",
         ].join("; ");
-        const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", relaunchScript], {
+        const child = spawn(process.env.ComSpec || "cmd.exe", [
+          "/c",
+          "start",
+          "\"Updater Tracker\"",
+          "powershell.exe",
+          "-NoExit",
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          relaunchScript,
+        ], {
           detached: true,
           stdio: "ignore",
-          windowsHide: false,
+          windowsHide: true,
         });
         child.unref();
         log("[updater] scheduled relaunch fallback");

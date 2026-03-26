@@ -93,10 +93,18 @@ function setupAutoUpdater() {
           "Write-Host '[Updater] Press Enter to close this window.'",
           "[void][System.Console]::ReadLine()",
         ].join("; ");
-        const startCmd =
-          `start "Updater Tracker" powershell.exe -NoExit -NoProfile ` +
-          `-ExecutionPolicy Bypass -Command "${relaunchScript.replace(/"/g, '\\"')}"`;
-        const child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", startCmd], {
+        const child = spawn(process.env.ComSpec || "cmd.exe", [
+          "/c",
+          "start",
+          "\"Updater Tracker\"",
+          "powershell.exe",
+          "-NoExit",
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          relaunchScript,
+        ], {
           detached: true,
           stdio: "ignore",
           windowsHide: false,

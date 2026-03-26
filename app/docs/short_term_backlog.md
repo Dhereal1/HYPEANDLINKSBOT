@@ -1,4 +1,5 @@
 Update flow<br>
+Win App Fullscreen Open<br>
 Bottom bar refactor<br>
 Username loaded without intermediate state<br>
 AI options page<br>

@@ -34,6 +34,8 @@ function setupAutoUpdater() {
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    let installRequested = false;
+
     autoUpdater.on("update-downloaded", () => {
       log("[updater] update-downloaded");
       dialog
@@ -47,18 +49,36 @@ function setupAutoUpdater() {
         })
         .then(({ response }) => {
           if (response === 0) {
-            // NSIS must see the app fully exit before the installer overwrites files. A short delay
-            // reduces races. Use silent install: quitAndInstall(false, *) runs the full NSIS UI, which
-            // looks like uninstall/reinstall; silent + --force-run is the normal seamless update path.
+            installRequested = true;
+            log("[updater] user accepted update install");
+
+            // Ensure renderers release file locks before NSIS starts uninstall/install.
+            for (const win of BrowserWindow.getAllWindows()) {
+              try {
+                win.removeAllListeners("close");
+                win.destroy();
+              } catch (_) {}
+            }
+
+            // Keep this delay explicit: Windows AV/scanners can hold the exe briefly after close.
             setTimeout(() => {
               try {
+                // Silent update avoids full NSIS wizard-looking reinstall UI.
                 autoUpdater.quitAndInstall(true, true);
               } catch (e) {
                 log(`quitAndInstall failed: ${e?.message || e}`);
+                // Fallback path: app quit still applies update because autoInstallOnAppQuit=true.
+                app.quit();
               }
-            }, 900);
+            }, 2500);
           }
         });
+    });
+
+    app.on("before-quit", () => {
+      if (installRequested) {
+        log("[updater] before-quit for update install");
+      }
     });
 
     let lastCheckAt = 0;

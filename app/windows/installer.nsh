@@ -54,6 +54,9 @@ ShowUnInstDetails show
   DetailPrint "[installer] customInstall start"
   !insertmacro _TraceLog "[installer] customInstall start"
   SetOverwrite on
+  ; Ensure the app is relaunched after install/update completes.
+  IfFileExists "$INSTDIR\${PRODUCT_FILENAME}.exe" 0 +2
+  ExecShell "open" "$INSTDIR\${PRODUCT_FILENAME}.exe"
   DetailPrint "[installer] customInstall complete"
   !insertmacro _TraceLog "[installer] customInstall complete"
 !macroend

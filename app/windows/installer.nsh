@@ -2,6 +2,14 @@
 ; Workaround for intermittent NSIS self-update/uninstall failures reported by
 ; multiple electron-builder users on some Windows machines.
 CRCCheck off
+ShowInstDetails show
+ShowUnInstDetails show
+
+!macro _TraceLog TEXT
+  FileOpen $0 "$TEMP\HyperlinksSpaceUpdater.log" a
+  FileWrite $0 "${TEXT}$\r$\n"
+  FileClose $0
+!macroend
 
 !macro customHeader
   Caption "${PRODUCT_NAME}"
@@ -20,6 +28,8 @@ CRCCheck off
 ; One-time migration workaround for installations stuck in uninstall error state (: 2).
 ; Keeps install in current-user mode and bypasses stale uninstall command strings.
 !macro customInit
+  DetailPrint "[installer] customInit start"
+  !insertmacro _TraceLog "[installer] customInit start"
   SetRegView 64
   DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
   DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "QuietUninstallString"
@@ -30,12 +40,30 @@ CRCCheck off
   DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "QuietUninstallString"
   DeleteRegValue HKLM "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
   DeleteRegValue HKLM "${UNINSTALL_REGISTRY_KEY}" "QuietUninstallString"
+  DetailPrint "[installer] customInit complete"
+  !insertmacro _TraceLog "[installer] customInit complete"
 !macroend
 
 !macro customInstallMode
+  DetailPrint "[installer] customInstallMode force current-user"
+  !insertmacro _TraceLog "[installer] customInstallMode force current-user"
   StrCpy $isForceCurrentInstall "1"
 !macroend
 
 !macro customInstall
+  DetailPrint "[installer] customInstall start"
+  !insertmacro _TraceLog "[installer] customInstall start"
   SetOverwrite on
+  ; Ensure the app is relaunched after install/update completes.
+  IfFileExists "$INSTDIR\${PRODUCT_FILENAME}.exe" 0 +2
+  ExecShell "open" "$INSTDIR\${PRODUCT_FILENAME}.exe"
+  DetailPrint "[installer] customInstall complete"
+  !insertmacro _TraceLog "[installer] customInstall complete"
+!macroend
+
+!macro customUnInstall
+  DetailPrint "[uninstaller] customUnInstall start"
+  !insertmacro _TraceLog "[uninstaller] customUnInstall start"
+  DetailPrint "[uninstaller] customUnInstall complete"
+  !insertmacro _TraceLog "[uninstaller] customUnInstall complete"
 !macroend

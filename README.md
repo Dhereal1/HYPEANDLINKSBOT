@@ -35,3 +35,20 @@ git switch -c new-branch-for-an-update
 ```
 gh pr create --title "My new PR" --body "It is my best PR"
 ```
+
+4. For subsequent commits (sync `main`, create a fresh branch, and commit there)
+
+```
+git checkout main # Return to main
+git fetch upstream # Fully sync with upstream main
+git reset --hard upstream/main # Reset local main to upstream/main
+git push origin main # Keep your fork main in sync too
+git switch -c new-branch-for-next-update # Create and switch to a new feature branch
+```
+
+After editing files in the new branch:
+
+```
+git add . # Stage changes on this branch
+git commit -m "Describe your change" # Commit on this branch
+```

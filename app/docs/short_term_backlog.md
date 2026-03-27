@@ -1,3 +1,5 @@
+installation logs
+installer repeated run (reinstallation)
 Run as administrator<br>
 Update flow<br>
 Win App Fullscreen Open<br>

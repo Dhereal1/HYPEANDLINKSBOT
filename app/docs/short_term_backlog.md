@@ -1,3 +1,6 @@
+Confirm fasten update
+Think of the place of the install update dialog
+When I close update checking, dialog still opens on the You are already on the latest version.
 Fix slow reload on update
 Installation logs
 Installer repeated run (overwriting, force the installer to close and open the app if running)

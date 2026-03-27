@@ -1,5 +1,5 @@
 Installation logs
-Iinstaller repeated run (overwriting, force the installer to close and open the app if running)
+Installer repeated run (overwriting, force the installer to close and open the app if running)
 System menu bottom border
 Run as administrator<br>
 Update flow<br>
@@ -12,6 +12,7 @@ AI chat page<br>
 Wallet: Telegram, Connected, Unhosted<br>
 Demo state<br>
 readme.md<br>
+Windows protected your PC (Get certificate)
 
 Issues:<br>
 Several chats async streaming<br>

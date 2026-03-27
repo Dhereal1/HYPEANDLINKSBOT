@@ -66,19 +66,19 @@ function setupAutoUpdater() {
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
 
-    /** Prefer percent; fall back to transferred/total (Windows often reports 0% early). */
+    /** Prefer transferred/total when known; Windows often keeps percent at 0 until late. */
     const progressPercent = (progress) => {
       if (!progress || typeof progress !== "object") return 0;
-      const p = progress.percent;
-      if (typeof p === "number" && !Number.isNaN(p) && p > 0) {
-        return Math.max(0, Math.min(100, p));
-      }
       const total = progress.total;
       const transferred = progress.transferred ?? 0;
       if (typeof total === "number" && total > 0) {
         return Math.max(0, Math.min(100, (100 * transferred) / total));
       }
+      const p = progress.percent;
       if (typeof p === "number" && !Number.isNaN(p)) {
+        if (p > 0 && p <= 1) {
+          return Math.max(0, Math.min(100, p * 100));
+        }
         return Math.max(0, Math.min(100, p));
       }
       return 0;
@@ -120,6 +120,19 @@ function setupAutoUpdater() {
 </div>
 <script>
   const { ipcRenderer } = require('electron');
+  function applyUpdaterUi(data) {
+    const t = document.getElementById('t');
+    const progressWrap = document.getElementById('progressWrap');
+    const actionsWrap = document.getElementById('actionsWrap');
+    const b = document.getElementById('b');
+    const i = document.getElementById('install');
+    if (t) t.textContent = data.text;
+    if (progressWrap) progressWrap.style.display = data.showProgress ? 'block' : 'none';
+    if (actionsWrap) actionsWrap.style.display = data.showActions ? 'flex' : 'none';
+    if (b) b.style.width = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0))) + '%';
+    if (i) i.disabled = !data.installEnabled;
+  }
+  ipcRenderer.on('updater-ui', (_e, data) => applyUpdaterUi(data));
   document.getElementById('install').addEventListener('click', () => ipcRenderer.send('updater-install-click'));
   document.getElementById('close').addEventListener('click', () => window.close());
 </script>
@@ -148,28 +161,26 @@ function setupAutoUpdater() {
       try {
         updateDialogState.window.setSize(420, expanded ? UPDATER_EXPANDED_H : UPDATER_COMPACT_H);
       } catch (_) {}
-      const js = `
-        (function() {
-          const t = document.getElementById('t');
-          const progressWrap = document.getElementById('progressWrap');
-          const actionsWrap = document.getElementById('actionsWrap');
-          const b = document.getElementById('b');
-          const i = document.getElementById('install');
-          if (t) t.textContent = ${JSON.stringify(text)};
-          if (progressWrap) progressWrap.style.display = ${showProgress ? "'block'" : "'none'"};
-          if (actionsWrap) actionsWrap.style.display = ${showActions ? "'flex'" : "'none'"};
-          if (b) b.style.width = '${safe}%';
-          if (i) i.disabled = ${installEnabled ? "false" : "true"};
-        })();
-      `;
-      const wc = updateDialogState.window.webContents;
-      const run = () => {
-        wc.executeJavaScript(js).catch((e) => log(`[updater] updateDialogUi: ${e?.message || e}`));
+      const payload = {
+        text,
+        percent: safe,
+        showProgress,
+        showActions,
+        installEnabled: Boolean(installEnabled),
       };
+      const wc = updateDialogState.window.webContents;
+      const send = () => {
+        try {
+          wc.send("updater-ui", payload);
+        } catch (e) {
+          log(`[updater] updateDialogUi send: ${e?.message || e}`);
+        }
+      };
+      // IPC survives rapid download-progress; executeJavaScript could drop or race with load state.
       if (wc.isLoading()) {
-        wc.once("did-finish-load", run);
+        wc.once("did-finish-load", send);
       } else {
-        run();
+        send();
       }
     };
     const closeUpdateDialog = () => {
@@ -273,8 +284,15 @@ function setupAutoUpdater() {
         });
       }
     });
+    let downloadProgressLoggedSample = false;
     autoUpdater.on("download-progress", (progress) => {
       if (!updateDialogState.window || updateDialogState.window.isDestroyed()) return;
+      if (!downloadProgressLoggedSample) {
+        downloadProgressLoggedSample = true;
+        try {
+          log(`[updater] download-progress sample: ${JSON.stringify(progress)}`);
+        } catch (_) {}
+      }
       const pct = progressPercent(progress);
       updateDialogUi({
         text: `Downloading update... ${Math.round(pct)}%`,
@@ -304,6 +322,7 @@ function setupAutoUpdater() {
     updaterMenuApi.checkNow = async () => {
       try {
         log("[updater] manual check requested from menu");
+        downloadProgressLoggedSample = false;
         manualCheckInProgress = true;
         manualDownloadInProgress = false;
         openOrFocusUpdateDialog();

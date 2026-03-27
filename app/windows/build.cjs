@@ -22,6 +22,8 @@ const updateDialogState = {
   installEnabled: false,
   ipcBound: false,
 };
+/** When true, skip app.quit() from window closed handlers so quitAndInstall can run first (avoids race + long hang). */
+let suppressQuitForUpdateInstall = false;
 
 function resolveNotificationIcon() {
   const candidates = [
@@ -213,6 +215,20 @@ function setupAutoUpdater() {
       log("[updater] user accepted update install");
       closeUpdateDialog();
 
+      // Destroying windows triggers mainWindow.closed → app.quit() and window-all-closed → app.quit()
+      // before quitAndInstall runs, which races the NSIS installer and can leave a long "dead" period.
+      suppressQuitForUpdateInstall = true;
+
+      try {
+        if (process.platform === "win32" && Notification.isSupported()) {
+          const n = new Notification({
+            title: "Hyperlinks Space App",
+            body: "Installing update… The app will restart when finished.",
+          });
+          n.show();
+        }
+      } catch (_) {}
+
       // Ensure renderers release file locks before NSIS starts uninstall/install.
       for (const win of BrowserWindow.getAllWindows()) {
         try {
@@ -222,11 +238,12 @@ function setupAutoUpdater() {
       }
 
       try {
-        // Interactive mode shows NSIS progress/update UI to the user.
-        log("[updater] invoking quitAndInstall(isSilent=false, isForceRunAfter=false)");
-        autoUpdater.quitAndInstall(false, false);
+        // isForceRunAfter=true: relaunch after install (matches NSIS runAfterFinish intent).
+        log("[updater] invoking quitAndInstall(isSilent=false, isForceRunAfter=true)");
+        autoUpdater.quitAndInstall(false, true);
       } catch (e) {
         log(`quitAndInstall failed: ${e?.message || e}`);
+        suppressQuitForUpdateInstall = false;
         // Fallback path: app quit still applies update because autoInstallOnAppQuit=true.
         app.quit();
       }
@@ -503,6 +520,7 @@ function createWindow() {
   }
 
   mainWindow.on("closed", () => {
+    if (suppressQuitForUpdateInstall) return;
     app.quit();
   });
 }
@@ -538,6 +556,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  if (suppressQuitForUpdateInstall) return;
   app.quit();
 });
 

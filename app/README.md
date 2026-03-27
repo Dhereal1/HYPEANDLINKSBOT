@@ -12,6 +12,13 @@ npm run start
 
 This runs both the Expo dev server and the bot. For Expo only (no bot), use `npm run start:expo`.
 
+### If `expo start` crashes with `TypeError: fetch failed`
+
+Expo CLI sometimes fetches dependency metadata during startup. If you’re offline / behind a firewall, start Expo with dependency validation disabled:
+
+- Recommended: `npm run start:expo` (already configured)
+- Or manually: `EXPO_NO_DEPENDENCY_VALIDATION=1 npx expo start`
+
 In the output, you'll find options to open the app in:
 
 - [a development build](https://docs.expo.dev/develop/development-builds/introduction/)

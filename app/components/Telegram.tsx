@@ -14,7 +14,7 @@ import {
   resetTelegramLaunchCache,
   triggerHaptic as triggerHapticImpl,
 } from "./telegramWebApp";
-import { buildApiUrl } from "../../api/base";
+import { buildApiUrl } from "../api/base";
 
 let sdkInitialized = false;
 function ensureSdkInitialized() {
@@ -618,10 +618,16 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
     setThemeBgReady(true);
   }, [status]);
 
-  const isInTelegram = status !== "dev";
-  const useTelegramTheme =
-    status !== "dev" ||
-    (typeof window !== "undefined" && (isTelegramLikelyAtStartup() || isAvailable()));
+  const forceTelegramEnv =
+    typeof process !== "undefined" ? process.env.EXPO_PUBLIC_FORCE_TELEGRAM : undefined;
+  const forceTelegramMode =
+    (__DEV__ && forceTelegramEnv !== "false") || forceTelegramEnv === "true";
+
+  const isInTelegram = forceTelegramMode ? true : status !== "dev";
+  const useTelegramTheme = forceTelegramMode
+    ? true
+    : status !== "dev" ||
+      (typeof window !== "undefined" && (isTelegramLikelyAtStartup() || isAvailable()));
 
   const value: TelegramContextValue = {
     status,

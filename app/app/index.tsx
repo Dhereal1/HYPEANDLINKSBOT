@@ -1,8 +1,9 @@
-import { Text, View } from "react-native";
-import { useTelegram } from "./components/Telegram";
+import { Platform, Text, View } from "react-native";
+import { useTelegram } from "../components/Telegram";
 
 export default function Index() {
-  const { status, telegramUsername, error, debug } = useTelegram();
+  const { status, isInTelegram, useTelegramTheme, themeBgReady, telegramUsername, error, debug } =
+    useTelegram();
 
   if (status === "idle" || status === "loading") {
     return (
@@ -49,7 +50,7 @@ export default function Index() {
     );
   }
 
-  if (status === "dev") {
+  if (!isInTelegram) {
     return (
       <View
         style={{
@@ -63,18 +64,36 @@ export default function Index() {
           Hyperlinks Space App
         </Text>
         <Text style={{ textAlign: "center", marginBottom: 12 }}>
-          Outside Telegram, authentication abandoned.
+          {Platform.OS === "web"
+            ? "Open this app inside Telegram to use Telegram authentication."
+            : "Telegram authentication is only available inside Telegram."}
         </Text>
-        <View style={{ marginTop: 8, padding: 8, backgroundColor: "#f0f0f0", borderRadius: 8, alignSelf: "stretch" }}>
-          <Text style={{ fontSize: 12, fontWeight: "600" }}>Debug</Text>
-          <Text style={{ fontSize: 11 }}>hasWebApp: {String(debug.hasWebApp)}</Text>
-          <Text style={{ fontSize: 11 }}>webAppPoll: {debug.webAppPollCount}</Text>
-          <Text style={{ fontSize: 11 }}>initData: {debug.initDataLength != null ? debug.initDataLength : "—"}</Text>
-          <Text style={{ fontSize: 11 }}>api: {debug.apiStatus ?? "—"} {debug.apiMessage ?? ""}</Text>
-          {debug.apiUrl != null && <Text style={{ fontSize: 10 }}>url: {debug.apiUrl}</Text>}
-          {debug.fetchDurationMs != null && <Text style={{ fontSize: 11 }}>fetchMs: {debug.fetchDurationMs}</Text>}
-          {debug.lastLog != null && <Text style={{ fontSize: 11 }}>lastLog: {debug.lastLog}</Text>}
-        </View>
+        {__DEV__ ? (
+          <View
+            style={{
+              marginTop: 8,
+              padding: 8,
+              backgroundColor: "#f0f0f0",
+              borderRadius: 8,
+              alignSelf: "stretch",
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: "600" }}>Debug</Text>
+            <Text style={{ fontSize: 11 }}>hasWebApp: {String(debug.hasWebApp)}</Text>
+            <Text style={{ fontSize: 11 }}>webAppPoll: {debug.webAppPollCount}</Text>
+            <Text style={{ fontSize: 11 }}>
+              initData: {debug.initDataLength != null ? debug.initDataLength : "—"}
+            </Text>
+            <Text style={{ fontSize: 11 }}>
+              api: {debug.apiStatus ?? "—"} {debug.apiMessage ?? ""}
+            </Text>
+            {debug.apiUrl != null && <Text style={{ fontSize: 10 }}>url: {debug.apiUrl}</Text>}
+            {debug.fetchDurationMs != null && (
+              <Text style={{ fontSize: 11 }}>fetchMs: {debug.fetchDurationMs}</Text>
+            )}
+            {debug.lastLog != null && <Text style={{ fontSize: 11 }}>lastLog: {debug.lastLog}</Text>}
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -96,7 +115,26 @@ export default function Index() {
           You are logged in via Telegram as @{telegramUsername}.
         </Text>
       )}
+      {__DEV__ ? (
+        <View
+          style={{
+            marginTop: 12,
+            padding: 8,
+            backgroundColor: "#f0f0f0",
+            borderRadius: 8,
+            alignSelf: "stretch",
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "600" }}>Debug</Text>
+          <Text style={{ fontSize: 11 }}>status: {status}</Text>
+          <Text style={{ fontSize: 11 }}>isInTelegram: {String(isInTelegram)}</Text>
+          <Text style={{ fontSize: 11 }}>useTelegramTheme: {String(useTelegramTheme)}</Text>
+          <Text style={{ fontSize: 11 }}>themeBgReady: {String(themeBgReady)}</Text>
+          <Text style={{ fontSize: 11 }}>
+            telegramUsername: {telegramUsername ?? "—"}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
-

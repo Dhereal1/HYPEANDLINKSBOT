@@ -2,12 +2,13 @@ import "../global.css";
 import { View, StyleSheet, Platform, KeyboardAvoidingView, AppState, Alert } from "react-native";
 import { Stack } from "expo-router";
 import * as Updates from "expo-updates";
-import { TelegramProvider } from "./components/Telegram";
-import { GlobalLogoBarWithFallback } from "./components/GlobalLogoBarWithFallback";
-import { GlobalBottomBar } from "./components/GlobalBottomBar";
-import { GlobalBottomBarWeb } from "./components/GlobalBottomBarWeb";
-import { useColors } from "./theme";
-import { useTelegram } from "./components/Telegram";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { TelegramProvider } from "../components/Telegram";
+import { GlobalLogoBarWithFallback } from "../components/GlobalLogoBarWithFallback";
+import { GlobalBottomBar } from "../components/GlobalBottomBar";
+import { GlobalBottomBarWeb } from "../components/GlobalBottomBarWeb";
+import { useColors } from "../theme";
+import { useTelegram } from "../components/Telegram";
 import { useEffect, useRef } from "react";
 
 /**
@@ -41,6 +42,8 @@ function useOtaUpdateChecks() {
 
   useEffect(() => {
     if (Platform.OS === "web") return;
+    // Expo Go cannot check for OTA updates; avoid noisy warnings.
+    if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return;
 
     const checkForOtaUpdate = async () => {
       const now = Date.now();

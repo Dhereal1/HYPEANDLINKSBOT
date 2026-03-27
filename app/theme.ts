@@ -8,6 +8,9 @@ const sharedColors = {
   secondary: "#818181",
 } as const;
 
+let lastUseColorsResolvedKey: string | null = null;
+let lastUseColorsPreReadyKey: string | null = null;
+
 export const dark = {
   ...sharedColors,
   background: "#111111",
@@ -69,8 +72,12 @@ export function useColors(): ThemeColors {
       getThemeColorsFromLaunchThemeParams();
     if (preReady) {
       if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log("[useColors] telegram pre-ready palette", preReady);
+        const key = JSON.stringify(preReady);
+        if (key !== lastUseColorsPreReadyKey) {
+          lastUseColorsPreReadyKey = key;
+          // eslint-disable-next-line no-console
+          console.log("[useColors] telegram pre-ready palette", preReady);
+        }
       }
       return preReady;
     }
@@ -82,14 +89,18 @@ export function useColors(): ThemeColors {
     !useTelegramTheme ? "dark" : themeBgReady ? colorScheme : "dark";
 
   if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log("[useColors] resolved", {
-      isInTelegram,
-      useTelegramTheme,
-      themeBgReady,
-      colorScheme,
-      themeName,
-    });
+    const key = `${isInTelegram}|${useTelegramTheme}|${themeBgReady}|${colorScheme}|${themeName}`;
+    if (key !== lastUseColorsResolvedKey) {
+      lastUseColorsResolvedKey = key;
+      // eslint-disable-next-line no-console
+      console.log("[useColors] resolved", {
+        isInTelegram,
+        useTelegramTheme,
+        themeBgReady,
+        colorScheme,
+        themeName,
+      });
+    }
   }
 
   return getColorsForTheme(themeName);
@@ -114,4 +125,3 @@ export const icons = {
     height: 10,
   },
 };
-

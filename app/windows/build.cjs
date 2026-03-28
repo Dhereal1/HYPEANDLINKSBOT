@@ -103,6 +103,70 @@ function githubLatestAssetUrl(fileName) {
   return `https://github.com/${UPDATE_GITHUB_OWNER}/${UPDATE_GITHUB_REPO}/releases/latest/download/${enc}`;
 }
 
+const GITHUB_API_HEADERS = {
+  Accept: "application/vnd.github+json",
+  "User-Agent": "HyperlinksSpaceApp/electron-updater",
+};
+
+/**
+ * When /releases/latest/download/<name>.zip returns 404, find the portable zip on the latest release
+ * via the GitHub API (asset names may differ slightly from artifactName).
+ * @returns {Promise<string|null>} browser_download_url or null
+ */
+async function fetchPortableZipBrowserUrlFromGitHubApi(netFetch, version, preferredFileName) {
+  const apiUrl = `https://api.github.com/repos/${UPDATE_GITHUB_OWNER}/${UPDATE_GITHUB_REPO}/releases/latest`;
+  const res = await netFetch(apiUrl, { headers: GITHUB_API_HEADERS });
+  if (!res.ok) {
+    log(`[updater] GitHub API GET releases/latest: HTTP ${res.status}`);
+    return null;
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    return null;
+  }
+  const assets = Array.isArray(data.assets) ? data.assets : [];
+  const zips = assets.filter((a) => a && typeof a.name === "string" && /\.zip$/i.test(a.name));
+  const skipName = (n) =>
+    /blockmap|\.7z\.|\.delta/i.test(n) || /-ia32-|arm64|\.msi$/i.test(n);
+  const candidates = zips.filter((a) => !skipName(a.name));
+
+  const exact = candidates.find((a) => a.name === preferredFileName);
+  if (exact?.browser_download_url) {
+    log(`[updater] GitHub API: exact zip match ${exact.name}`);
+    return exact.browser_download_url;
+  }
+
+  const verLoose = String(version).trim();
+  const withVersion = candidates.filter((a) => a.name.includes(verLoose));
+  if (withVersion.length === 1 && withVersion[0].browser_download_url) {
+    log(`[updater] GitHub API: single zip matching version ${verLoose}: ${withVersion[0].name}`);
+    return withVersion[0].browser_download_url;
+  }
+
+  const prefixed = candidates.find(
+    (a) =>
+      a.name.startsWith(WIN_PORTABLE_ZIP_PREFIX) ||
+      /^HyperlinksSpaceApp[_-]/i.test(a.name) ||
+      /Hyperlinks\s*Space/i.test(a.name),
+  );
+  if (prefixed?.browser_download_url) {
+    log(`[updater] GitHub API: portable-like zip ${prefixed.name}`);
+    return prefixed.browser_download_url;
+  }
+
+  if (candidates.length === 1 && candidates[0].browser_download_url) {
+    log(`[updater] GitHub API: only zip on release: ${candidates[0].name}`);
+    return candidates[0].browser_download_url;
+  }
+
+  log(
+    `[updater] GitHub API: could not pick zip (candidates: ${candidates.map((c) => c.name).join(", ") || "none"})`,
+  );
+  return null;
+}
+
 async function downloadToFile(netFetch, url, destPath, onProgress) {
   const res = await netFetch(url);
   if (!res.ok) {
@@ -506,21 +570,30 @@ function setupAutoUpdater() {
         fs.mkdirSync(extractDir, { recursive: true });
 
         const zipPath = path.join(versionDir, meta.fileName);
-        const zipUrl = githubLatestAssetUrl(meta.fileName);
-        await downloadToFile(
-          (u) => net.fetch(u),
-          zipUrl,
-          zipPath,
-          (received, total) => {
-            const dl = total > 0 ? received / total : 0;
-            const dlPct = total > 0 ? Math.round(100 * dl) : 0;
-            const overall = Math.min(PROGRESS_DOWNLOAD_CAP, Math.round(PROGRESS_DOWNLOAD_CAP * dl));
-            pushUi({
-              text: `Downloading and preparing update… ${dlPct}%`,
-              percent: overall,
-            });
-          },
-        );
+        const primaryZipUrl = githubLatestAssetUrl(meta.fileName);
+        const onZipProgress = (received, total) => {
+          const dl = total > 0 ? received / total : 0;
+          const dlPct = total > 0 ? Math.round(100 * dl) : 0;
+          const overall = Math.min(PROGRESS_DOWNLOAD_CAP, Math.round(PROGRESS_DOWNLOAD_CAP * dl));
+          pushUi({
+            text: `Downloading and preparing update… ${dlPct}%`,
+            percent: overall,
+          });
+        };
+        try {
+          await downloadToFile((u) => net.fetch(u), primaryZipUrl, zipPath, onZipProgress);
+        } catch (e) {
+          const msg = String(e?.message || e);
+          if (!/404/.test(msg)) throw e;
+          const altUrl = await fetchPortableZipBrowserUrlFromGitHubApi(
+            (u, init) => net.fetch(u, init),
+            meta.version,
+            meta.fileName,
+          );
+          if (!altUrl) throw e;
+          log(`[updater] primary zip 404; downloading from GitHub API URL`);
+          await downloadToFile((u) => net.fetch(u), altUrl, zipPath, onZipProgress);
+        }
 
         pushUi({ text: "Verifying update…", percent: PROGRESS_DOWNLOAD_CAP + 2 });
 

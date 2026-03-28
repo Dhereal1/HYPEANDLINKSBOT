@@ -10,11 +10,11 @@ import {
 import { handleBotAiResponse } from './responder.js';
 
 function getMiniAppBaseUrl(): string | null {
-  const explicit = process.env.MINI_APP_URL?.trim();
-  if (explicit) return explicit;
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   }
+  const explicit = process.env.MINI_APP_URL?.trim();
+  if (explicit) return explicit;
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
   }

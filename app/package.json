@@ -8,7 +8,7 @@
     "url": "https://github.com/HyperlinksSpace/HyperlinksSpaceBot.git"
   },
   "main": "expo-router/entry",
-  "version": "53.0.1289",
+  "version": "53.0.1290",
   "type": "module",
   "engines": {
     "node": ">=18 <=22"
@@ -36,7 +36,10 @@
     "pack:win": "node windows/build-with-progress.cjs --pack",
     "pack:win:raw": "electron-builder --win --publish never && node windows/cleanup.cjs",
     "build:win:dir": "npm run build && electron-builder --win --publish never --config.win.target=dir",
-    "build:win:verbose": "node windows/build-with-progress.cjs --verbose"
+    "build:win:verbose": "node windows/build-with-progress.cjs --verbose",
+    "version:bump": "npm version patch --no-git-tag-version",
+    "version:bump-minor": "npm version minor --no-git-tag-version",
+    "version:bump-major": "npm version major --no-git-tag-version"
   },
   "build": {
     "appId": "com.sraibaby.app",

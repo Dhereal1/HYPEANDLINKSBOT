@@ -114,29 +114,31 @@ function resolveZipAppContentRoot(extractDir, exeBaseName) {
   return null;
 }
 
-/** Remove obsolete dirs under installDir/versions/ (older than running app). Runs async after delay. */
+/** Remove obsolete staged-update dirs (older than running app). Runs async after delay. */
 function scheduleVersionsFolderCleanup() {
   if (isDev || !app.isPackaged || process.platform !== "win32") return;
-  const installDir = path.dirname(process.execPath);
-  const versionsRoot = path.join(installDir, "versions");
   const current = app.getVersion();
   setTimeout(() => {
     try {
-      if (!fs.existsSync(versionsRoot)) return;
-      for (const name of fs.readdirSync(versionsRoot)) {
-        const full = path.join(versionsRoot, name);
-        let st;
-        try {
-          st = fs.statSync(full);
-        } catch (_) {
-          continue;
+      const sweep = (versionsRoot, label) => {
+        if (!fs.existsSync(versionsRoot)) return;
+        for (const name of fs.readdirSync(versionsRoot)) {
+          const full = path.join(versionsRoot, name);
+          let st;
+          try {
+            st = fs.statSync(full);
+          } catch (_) {
+            continue;
+          }
+          if (!st.isDirectory()) continue;
+          if (compareSemverLike(name, current) < 0) {
+            fs.rmSync(full, { recursive: true, force: true });
+            log(`[updater] removed old staged folder (${label}): ${name}`);
+          }
         }
-        if (!st.isDirectory()) continue;
-        if (compareSemverLike(name, current) < 0) {
-          fs.rmSync(full, { recursive: true, force: true });
-          log(`[updater] removed old versions folder: ${name}`);
-        }
-      }
+      };
+      sweep(path.join(app.getPath("userData"), "pending-update-versions"), "userData");
+      sweep(path.join(path.dirname(process.execPath), "versions"), "legacy installDir");
     } catch (e) {
       log(`[updater] versions cleanup: ${e?.message || e}`);
     }
@@ -351,7 +353,7 @@ function setupAutoUpdater() {
     const syncZipReadyUi = (v) => {
       if (!updateDialogState.window || updateDialogState.window.isDestroyed()) return;
       updateDialogUi({
-        text: `Update ${v} is ready (under versions/). Click Update.`,
+        text: `Update ${v} is ready. Click Update.`,
         percent: 100,
         showProgress: true,
         showActions: true,
@@ -372,12 +374,48 @@ function setupAutoUpdater() {
       }
     };
 
+    const getVersionsStagingRoot = () => path.join(app.getPath("userData"), "pending-update-versions");
+
+    const restoreVersionsStagingFromDisk = () => {
+      const root = getVersionsStagingRoot();
+      if (!fs.existsSync(root)) return;
+      const exeBase = path.basename(process.execPath);
+      let bestVer = null;
+      let bestContent = null;
+      for (const name of fs.readdirSync(root)) {
+        const full = path.join(root, name);
+        let st;
+        try {
+          st = fs.statSync(full);
+        } catch (_) {
+          continue;
+        }
+        if (!st.isDirectory()) continue;
+        if (compareSemverLike(name, currentVersion) <= 0) continue;
+        const extractDir = path.join(full, "extract");
+        if (!fs.existsSync(extractDir)) continue;
+        const contentRoot = resolveZipAppContentRoot(extractDir, exeBase);
+        if (!contentRoot || !stagingHasMainExe(contentRoot)) continue;
+        if (!bestVer || compareSemverLike(name, bestVer) > 0) {
+          bestVer = name;
+          bestContent = contentRoot;
+        }
+      }
+      if (bestVer && bestContent) {
+        zipReadyVersion = bestVer;
+        zipStagingContentPath = bestContent;
+        installUsesNsisFallback = false;
+        log(`[updater] restored staging from disk: ${bestVer} -> ${bestContent}`);
+      }
+    };
+
+    restoreVersionsStagingFromDisk();
+
     const tryBeginVersionsPrepare = async (info, opts) => {
       if (!useWinVersionsSidecar) return;
       const remoteV = info?.version;
       if (!remoteV || compareSemverLike(remoteV, currentVersion) <= 0) return;
       if (zipPrepareInFlight) return;
-      const installDir = path.dirname(process.execPath);
       const exeBase = path.basename(process.execPath);
       if (zipReadyVersion === remoteV && zipStagingContentPath && stagingHasMainExe(zipStagingContentPath)) {
         syncZipReadyUi(remoteV);
@@ -418,7 +456,7 @@ function setupAutoUpdater() {
 
         pushUi({ text: `Downloading ${meta.version}...`, percent: 0 });
 
-        const versionsRoot = path.join(installDir, "versions");
+        const versionsRoot = getVersionsStagingRoot();
         const versionDir = path.join(versionsRoot, meta.version);
         const extractDir = path.join(versionDir, "extract");
         try {
@@ -444,7 +482,7 @@ function setupAutoUpdater() {
         const hash = sha512Base64OfFile(zipPath);
         if (hash !== meta.sha512) throw new Error("zip sha512 mismatch");
 
-        pushUi({ text: `Unpacking to versions/${meta.version}/...`, percent: 100 });
+        pushUi({ text: `Unpacking update ${meta.version}...`, percent: 100 });
 
         const AdmZip = require("adm-zip");
         const zip = new AdmZip(zipPath);
@@ -472,6 +510,9 @@ function setupAutoUpdater() {
         }
       } catch (e) {
         log(`[updater] versions sidecar failed: ${e?.message || e}`);
+        log(
+          "[updater] For instant apply: attach zip-latest.yml and HyperlinksSpaceApp_<version>.zip from cleanup output to the GitHub latest release.",
+        );
         zipStagingContentPath = null;
         zipReadyVersion = null;
         installUsesNsisFallback = true;
@@ -501,12 +542,16 @@ function setupAutoUpdater() {
       const installDir = path.dirname(process.execPath);
       const exeName = path.basename(process.execPath);
       const planPath = path.join(app.getPath("temp"), `hsp-update-plan-${Date.now()}.json`);
+      const stagingVersionDirToRemove = zipReadyVersion
+        ? path.join(getVersionsStagingRoot(), zipReadyVersion)
+        : null;
       const plan = {
         stagingContent: zipStagingContentPath,
         installDir,
         exeName,
         waitPid: process.pid,
         appliedVersion: zipReadyVersion,
+        stagingVersionDirToRemove,
       };
       fs.writeFileSync(planPath, JSON.stringify(plan), "utf8");
 
@@ -532,8 +577,9 @@ function setupAutoUpdater() {
         "    }",
         "  }",
         "}",
-        "$vdir = Join-Path $dst ('versions\\' + $plan.appliedVersion)",
-        "if (Test-Path -LiteralPath $vdir) { Remove-Item -LiteralPath $vdir -Recurse -Force }",
+        "if ($plan.stagingVersionDirToRemove -and (Test-Path -LiteralPath $plan.stagingVersionDirToRemove)) {",
+        "  Remove-Item -LiteralPath $plan.stagingVersionDirToRemove -Recurse -Force",
+        "}",
         'Start-Process -FilePath (Join-Path $dst $plan.exeName)',
         "try { Remove-Item -LiteralPath $PlanPath -Force } catch {}",
         "",
@@ -654,7 +700,7 @@ function setupAutoUpdater() {
         openOrFocusUpdateDialog();
         updateDialogUi({
           text: useWinVersionsSidecar
-            ? `Preparing version ${info?.version || "new"} (versions/)...`
+            ? `Preparing version ${info?.version || "new"}...`
             : `Downloading version ${info?.version || "new"}...`,
           percent: 0,
           showProgress: true,

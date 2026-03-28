@@ -16,11 +16,31 @@ const { spawn } = require("child_process");
 const { pathToFileURL } = require("url");
 
 const UPDATE_GITHUB_OWNER = "HyperlinksSpace";
-const UPDATE_GITHUB_REPO = "HyperlinksSpaceBot";
+/** Must match `build.publish.repo` and the repo where CI uploads releases. */
+const UPDATE_GITHUB_REPO = "HyperlinksSpaceProgram";
 const ZIP_LATEST_YML = "zip-latest.yml";
 /** Same pattern as package.json build.win.artifactName for the zip target. */
 const WIN_PORTABLE_ZIP_PREFIX = "HyperlinksSpaceApp_";
 const LATEST_YML = "latest.yml";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** GitHub sometimes returns 502 HTML (Unicorn) or other gateway errors; worth retrying. */
+function isTransientGithubUpdateError(err) {
+  if (!err) return false;
+  const code = err.statusCode ?? err.status;
+  if (code === 502 || code === 503 || code === 504) return true;
+  const msg = String(err.message || err);
+  if (
+    /\b502\b|\b503\b|\b504\b|Bad Gateway|Service Unavailable|Gateway Timeout|taking too long|ECONNRESET|ETIMEDOUT/i.test(
+      msg,
+    )
+  )
+    return true;
+  return false;
+}
 
 /**
  * Prefer zip-latest.yml (has sha512 for the zip). If missing (404), use latest.yml + inferred zip name.
@@ -308,6 +328,25 @@ function setupAutoUpdater() {
     const { autoUpdater } = require("electron-updater");
     let manualCheckInProgress = false;
     let manualDownloadInProgress = false;
+    let updaterCheckRetrying = false;
+
+    const checkForUpdatesWithRetry = async (attempts = 4) => {
+      let lastErr;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await autoUpdater.checkForUpdates();
+        } catch (e) {
+          lastErr = e;
+          if (!isTransientGithubUpdateError(e) || i === attempts - 1) throw e;
+          const delayMs = 1500 * 2 ** i;
+          log(
+            `[updater] transient GitHub/update error (${i + 1}/${attempts}), retry in ${delayMs}ms: ${e?.message || e}`,
+          );
+          await sleep(delayMs);
+        }
+      }
+      throw lastErr;
+    };
     const currentVersion = app.getVersion();
     const currentVersionHtml = String(currentVersion)
       .replace(/&/g, "&amp;")
@@ -887,6 +926,9 @@ function setupAutoUpdater() {
 
     autoUpdater.on("error", (err) => {
       log(`[updater] error: ${err?.message || String(err)}`);
+      if (updaterCheckRetrying && isTransientGithubUpdateError(err)) {
+        return;
+      }
       if (manualCheckInProgress || manualDownloadInProgress) {
         manualCheckInProgress = false;
         manualDownloadInProgress = false;
@@ -925,7 +967,12 @@ function setupAutoUpdater() {
           showActions: false,
           installEnabled: false,
         });
-        await autoUpdater.checkForUpdates();
+        updaterCheckRetrying = true;
+        try {
+          await checkForUpdatesWithRetry();
+        } finally {
+          updaterCheckRetrying = false;
+        }
       } catch (e) {
         manualCheckInProgress = false;
         manualDownloadInProgress = false;
@@ -953,7 +1000,16 @@ function setupAutoUpdater() {
     const markAndCheck = () => {
       lastCheckAt = Date.now();
       log("[updater] scheduled checkForUpdates()");
-      void autoUpdater.checkForUpdates();
+      void (async () => {
+        updaterCheckRetrying = true;
+        try {
+          await checkForUpdatesWithRetry();
+        } catch (e) {
+          log(`[updater] checkForUpdates failed after retries: ${e?.message || e}`);
+        } finally {
+          updaterCheckRetrying = false;
+        }
+      })();
     };
 
     // 1) On startup (each app launch)

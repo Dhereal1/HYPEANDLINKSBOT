@@ -95,7 +95,7 @@
     "publish": {
       "provider": "github",
       "owner": "HyperlinksSpace",
-      "repo": "HyperlinksSpaceBot"
+      "repo": "HyperlinksSpaceProgram"
     }
   },
   "dependencies": {

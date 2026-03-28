@@ -47,7 +47,8 @@ jobs:
       - name: Build Windows installer
         run: npm run build:win
 
-      - name: Locate installer and release id
+      # cleanup.cjs writes installer + latest.yml + portable zip + zip-latest.yml under releases/<build_id>/.
+      - name: Locate installer, portable zip, and release id
         id: artifact
         run: |
           set -euo pipefail
@@ -58,9 +59,20 @@ jobs:
             find releases -maxdepth 5 -type f 2>/dev/null || true
             exit 1
           fi
+          zip="$(ls -1 "releases/$rid"/HyperlinksSpaceApp_*.zip 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$zip" || ! -f "$zip" ]]; then
+            echo "Portable zip HyperlinksSpaceApp_<version>.zip is required for in-app updates (electron-builder zip target + cleanup)."
+            find "releases/$rid" -maxdepth 1 -type f 2>/dev/null || true
+            exit 1
+          fi
+          zip_yml="$(dirname "$zip")/zip-latest.yml"
           exe_name="$(basename "$exe")"
+          zip_name="$(basename "$zip")"
           echo "exe_path=$exe" >> "$GITHUB_OUTPUT"
           echo "exe_name=$exe_name" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$zip" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$zip_name" >> "$GITHUB_OUTPUT"
+          echo "zip_yml_path=$zip_yml" >> "$GITHUB_OUTPUT"
           echo "release_id=$rid" >> "$GITHUB_OUTPUT"
 
       - name: Check if GitHub release already exists
@@ -77,7 +89,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub release and upload installer
+      - name: Create GitHub release and upload installer + portable zip
         if: steps.exists.outputs.exists != 'true'
         id: create
         env:
@@ -86,15 +98,27 @@ jobs:
           set -euo pipefail
           rid="${{ steps.artifact.outputs.release_id }}"
           exe="${{ steps.artifact.outputs.exe_path }}"
+          zip="${{ steps.artifact.outputs.zip_path }}"
+          zip_yml="${{ steps.artifact.outputs.zip_yml_path }}"
           yml="$(dirname "$exe")/latest.yml"
           if [[ ! -f "$yml" ]]; then
             echo "latest.yml missing next to installer — electron-updater needs it on the GitHub Release."
             exit 1
           fi
-          gh release create "$rid" "$exe" "$yml" \
+          if [[ ! -f "$zip" ]]; then
+            echo "Portable zip missing at $zip"
+            exit 1
+          fi
+          upload=( "$exe" "$yml" "$zip" )
+          if [[ -f "$zip_yml" ]]; then
+            upload+=( "$zip_yml" )
+          else
+            echo "Warning: zip-latest.yml missing (cleanup should generate it when zip exists)."
+          fi
+          gh release create "$rid" "${upload[@]}" \
             --repo "${{ github.repository }}" \
             --title "$rid" \
-            --notes "Windows installer built on GitHub Actions (workflow run ${{ github.run_id }})."
+            --notes "Windows build on GitHub Actions (workflow run ${{ github.run_id }}). Assets: NSIS installer, latest.yml, portable zip (in-app quick update), optional zip-latest.yml."
           release_url="https://github.com/${{ github.repository }}/releases/tag/$rid"
           echo "release_url=$release_url" >> "$GITHUB_OUTPUT"
 

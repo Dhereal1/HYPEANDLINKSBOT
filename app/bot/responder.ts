@@ -12,6 +12,10 @@ import {
 
 /** Telegram text message length limit. */
 const MAX_MESSAGE_TEXT_LENGTH = 4096;
+/** Hard cap on continuation chunks to avoid Telegram flood limits in topics/groups. */
+const MAX_LONG_MESSAGE_PARTS = 2;
+const TELEGRAM_TRUNCATION_NOTICE =
+  "\n\n[Truncated in Telegram. Open the Mini App for the full response.]";
 
 /** Instruction passed to AI when the message comes from the bot: keep replies under 4096 chars and mention TMA for long answers. */
 const TELEGRAM_BOT_LENGTH_INSTRUCTION =
@@ -34,6 +38,17 @@ function chunkText(text: string, maxLen: number): string[] {
   return chunks;
 }
 
+function getRetryAfterSeconds(error: unknown): number {
+  const retryAfter = (error as { parameters?: { retry_after?: number } })?.parameters?.retry_after;
+  return typeof retryAfter === "number" && Number.isFinite(retryAfter) ? retryAfter : 0;
+}
+
+function isTelegramRateLimit(error: unknown): boolean {
+  const code = (error as { error_code?: number })?.error_code;
+  const description = (error as { description?: string })?.description ?? "";
+  return code === 429 || description.includes("Too Many Requests");
+}
+
 /** Send long text as multiple messages (each ≤ MAX_MESSAGE_TEXT_LENGTH). First chunk replies to replyToMessageId or uses replyOptions; rest reply to previous sent message. */
 async function sendLongMessage(
   api: Context["api"],
@@ -45,11 +60,17 @@ async function sendLongMessage(
 ): Promise<void> {
   const chunks = chunkText(fullText, MAX_MESSAGE_TEXT_LENGTH);
   if (chunks.length === 0) return;
+  const limited = chunks.slice(0, MAX_LONG_MESSAGE_PARTS);
   let lastSentId: number | undefined = opts.replyToMessageId;
-  for (let i = 0; i < chunks.length; i++) {
+  for (let i = 0; i < limited.length; i++) {
+    const isLastAllowed = i === limited.length - 1;
+    const withNotice =
+      isLastAllowed && chunks.length > MAX_LONG_MESSAGE_PARTS
+        ? `${limited[i].trimEnd()}${TELEGRAM_TRUNCATION_NOTICE}`
+        : limited[i];
     const formatted = truncateTelegramHtmlSafe(
       closeOpenTelegramHtml(
-        stripUnpairedMarkdownDelimiters(mdToTelegramHtml(chunks[i])),
+        stripUnpairedMarkdownDelimiters(mdToTelegramHtml(withNotice)),
       ),
       MAX_MESSAGE_TEXT_LENGTH,
     );
@@ -67,21 +88,28 @@ async function sendLongMessage(
       if (typeof id === "number") lastSentId = id;
     } catch (e) {
       console.error("[bot][sendLongMessage]", (e as Error)?.message ?? e);
+      if (isTelegramRateLimit(e) && getRetryAfterSeconds(e) > 15) return;
       try {
-        const markdown = toTelegramMarkdown(chunks[i]);
+        const markdown = toTelegramMarkdown(withNotice);
         const sent = await api.sendMessage(chatId, markdown, {
           ...partOptions,
           parse_mode: "Markdown",
         });
         const id = (sent as { message_id?: number }).message_id;
         if (typeof id === "number") lastSentId = id;
-      } catch {
-        const sent = await api.sendMessage(chatId, chunks[i], {
-          ...(replyOptions.message_thread_id !== undefined ? { message_thread_id: replyOptions.message_thread_id } : {}),
-          ...(lastSentId !== undefined ? { reply_parameters: { message_id: lastSentId } } : {}),
-        });
-        const id = (sent as { message_id?: number }).message_id;
-        if (typeof id === "number") lastSentId = id;
+      } catch (e2) {
+        if (isTelegramRateLimit(e2) && getRetryAfterSeconds(e2) > 15) return;
+        try {
+          const sent = await api.sendMessage(chatId, withNotice, {
+            ...(replyOptions.message_thread_id !== undefined ? { message_thread_id: replyOptions.message_thread_id } : {}),
+            ...(lastSentId !== undefined ? { reply_parameters: { message_id: lastSentId } } : {}),
+          });
+          const id = (sent as { message_id?: number }).message_id;
+          if (typeof id === "number") lastSentId = id;
+        } catch (e3) {
+          console.error("[bot][sendLongMessage] plain fallback failed", (e3 as Error)?.message ?? e3);
+          return;
+        }
       }
     }
   }
@@ -92,9 +120,9 @@ function toTelegramMarkdown(s: string): string {
   return s.replace(/\*\*/g, "*");
 }
 /** Throttle editMessageText to avoid Telegram 429 rate limits. */
-const EDIT_THROTTLE_MS = 500;
+const EDIT_THROTTLE_MS = 1200;
 /** If content grew by more than this many chars, edit immediately so long tail doesn't stick. */
-const EDIT_MIN_CHARS_TO_SEND_NOW = 20;
+const EDIT_MIN_CHARS_TO_SEND_NOW = 80;
 
 /** Track latest generation per chat so newer messages cancel older streams. */
 const chatGenerations = new Map<number, number>();
@@ -103,7 +131,10 @@ const threadControllers = new Map<string, AbortController>();
 
 function startNewGeneration(threadKey: string): AbortController {
   const existing = threadControllers.get(threadKey);
-  if (existing) existing.abort();
+  if (existing) {
+    existing.abort();
+    console.log("[bot][cancel] aborted previous generation", threadKey);
+  }
   const controller = new AbortController();
   threadControllers.set(threadKey, controller);
   return controller;
@@ -311,7 +342,13 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
           const err = e as { error_code?: number; description?: string; parameters?: { retry_after?: number } };
           if (err?.description?.includes("not modified")) return;
           if (err?.error_code === 429) {
-            await new Promise((r) => setTimeout(r, Math.min((err.parameters?.retry_after ?? 1) * 1000, 2000)));
+            const retryAfterSec = err.parameters?.retry_after ?? 1;
+            if (retryAfterSec > 15) {
+              console.warn("[bot][edit] disabling edits due to long rate limit window", retryAfterSec);
+              editsDisabled = true;
+              return;
+            }
+            await new Promise((r) => setTimeout(r, Math.min(retryAfterSec * 1000, 5000)));
             try {
               if (sentMessageId === null) {
                 const sent = await ctx.api.sendMessage(chatId, text, replyOptionsWithHtml);
@@ -620,14 +657,18 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   if (streamSentMessageId !== null && chatId !== undefined) {
     if (generationSignal.aborted) return;
     if (result.output_text.length > MAX_MESSAGE_TEXT_LENGTH) {
-      await sendLongMessage(
-        ctx.api,
-        chatId,
-        result.output_text.slice(MAX_MESSAGE_TEXT_LENGTH),
-        replyOptions,
-        replyOptionsWithHtml,
-        { replyToMessageId: streamSentMessageId },
-      );
+      try {
+        await sendLongMessage(
+          ctx.api,
+          chatId,
+          result.output_text.slice(MAX_MESSAGE_TEXT_LENGTH),
+          replyOptions,
+          replyOptionsWithHtml,
+          { replyToMessageId: streamSentMessageId },
+        );
+      } catch (e) {
+        console.error("[bot][overflow] continuation failed", (e as Error)?.message ?? e);
+      }
     }
     return;
   }
@@ -654,7 +695,16 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   }
 
   if (chatId !== undefined) {
-    await sendLongMessage(ctx.api, chatId, result.output_text, replyOptions, replyOptionsWithHtml, {});
+    try {
+      await sendLongMessage(ctx.api, chatId, result.output_text, replyOptions, replyOptionsWithHtml, {});
+    } catch (e) {
+      console.error("[bot][sendLongMessage] failed", (e as Error)?.message ?? e);
+      try {
+        await ctx.reply("Response was rate-limited by Telegram. Please retry in a moment.", replyOptions);
+      } catch {
+        // no-op
+      }
+    }
   } else {
     const textToFormat = result.output_text.slice(0, MAX_MESSAGE_TEXT_LENGTH);
     await ctx.reply(textToFormat, replyOptions);

@@ -98,6 +98,16 @@ const EDIT_MIN_CHARS_TO_SEND_NOW = 20;
 
 /** Track latest generation per chat so newer messages cancel older streams. */
 const chatGenerations = new Map<number, number>();
+/** Single source of truth for hard-cancel per thread ("latest prompt wins"). */
+const threadControllers = new Map<string, AbortController>();
+
+function startNewGeneration(threadKey: string): AbortController {
+  const existing = threadControllers.get(threadKey);
+  if (existing) existing.abort();
+  const controller = new AbortController();
+  threadControllers.set(threadKey, controller);
+  return controller;
+}
 
 type BotSourceContext = {
   source: "bot";
@@ -179,8 +189,12 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   const isPrivate = ctx.chat?.type === "private";
   const canStream = isPrivate && typeof chatId === "number";
+  const threadKey = `bot:${typeof chatId === "number" ? chatId : from?.id ?? "unknown"}:${thread_id}`;
+  const generationController = startNewGeneration(threadKey);
+  const generationSignal = generationController.signal;
   /** When streaming we send one message early then edit it; used to detect streaming path. */
   let streamSentMessageId: number | null = null;
+  try {
 
   const numericChatId =
     typeof chatId === "number" ? chatId : undefined;
@@ -191,8 +205,9 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     chatGenerations.set(numericChatId, generation);
   }
   const isCancelled = (): boolean =>
-    numericChatId !== undefined &&
-    chatGenerations.get(numericChatId) !== generation;
+    generationSignal.aborted ||
+    (numericChatId !== undefined &&
+      chatGenerations.get(numericChatId) !== generation);
 
   const shouldAbortSend = async (): Promise<boolean> => {
     if (!threadContext) return false;
@@ -221,7 +236,8 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     /** When turn is interrupted: message already exists (we sent early); optionally final edit, always persist. HTML only (format pipeline is strict). */
     const sendInterruptedReply = async (opts: { sendToChat: boolean }): Promise<void> => {
       const content = streamedAccumulated.trim();
-      if (sentMessageId !== null && content.length > 0) {
+      const allowChatSend = opts.sendToChat && !generationSignal.aborted;
+      if (allowChatSend && sentMessageId !== null && content.length > 0) {
         const toEdit = truncateTelegramHtmlSafe(
           closeOpenTelegramHtml(
             stripUnpairedMarkdownDelimiters(mdToTelegramHtml(content)),
@@ -233,7 +249,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
         } catch (e) {
           console.error("[bot][edit] interrupted reply", (e as Error)?.message ?? e);
         }
-      } else if (opts.sendToChat && content.length > 0) {
+      } else if (allowChatSend && content.length > 0) {
         const toSend = truncateTelegramHtmlSafe(
           closeOpenTelegramHtml(
             stripUnpairedMarkdownDelimiters(mdToTelegramHtml(content)),
@@ -245,7 +261,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
         } catch (e) {
           console.error("[bot][reply] interrupted", (e as Error)?.message ?? e);
         }
-      } else if (opts.sendToChat && sentMessageId === null) {
+      } else if (allowChatSend && sentMessageId === null) {
         try {
           await ctx.reply("…", replyOptions);
         } catch (_) {}
@@ -276,6 +292,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     /** First call sends a message (claims message_id); later calls edit that message. HTML only; format pipeline is strict so Telegram accepts it. */
     const sendOrEditOnce = (formatted: string, _rawSlice: string): Promise<void> => {
       const run = async (): Promise<void> => {
+        if (generationSignal.aborted) return;
         if (await shouldAbortSend()) return;
         if (isCancelled() || editsDisabled) return;
         const text = truncateTelegramHtmlSafe(formatted.trim() || "…", MAX_MESSAGE_TEXT_LENGTH);
@@ -321,6 +338,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     };
 
     const flushEdit = (awaitSend = false): void | Promise<void> => {
+      if (generationSignal.aborted) return;
       if (isCancelled()) return;
       if (pending === null) return;
       const slice = pending;
@@ -340,6 +358,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     const sendOrEdit = (accumulated: string): void => {
       stopTypingSpinner();
       streamedAccumulated = accumulated;
+      if (generationSignal.aborted) return;
       if (isCancelled()) return;
       const slice = accumulated.length > MAX_MESSAGE_TEXT_LENGTH
         ? accumulated.slice(0, MAX_MESSAGE_TEXT_LENGTH)
@@ -385,6 +404,10 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     await sendOrEditOnce(typingFrames[typingIndex], typingFrames[typingIndex]);
 
     typingInterval = setInterval(() => {
+      if (generationSignal.aborted) {
+        stopTypingSpinner();
+        return;
+      }
       if (sentMessageId === null) return;
       typingIndex = (typingIndex + 1) % typingFrames.length;
       ctx.api
@@ -398,6 +421,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
         {
           isCancelled,
           getAbortSignal: async () => (await shouldAbortSend()) || isCancelled(),
+          abortSignal: generationSignal,
         },
       );
     } catch (e) {
@@ -414,6 +438,11 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     }
     if (result.skipped) {
       stopTypingSpinner();
+      return;
+    }
+    if (generationSignal.aborted) {
+      stopTypingSpinner();
+      await sendInterruptedReply({ sendToChat: false });
       return;
     }
     if (isCancelled()) {
@@ -452,6 +481,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
           {
             isCancelled,
             getAbortSignal: async () => (await shouldAbortSend()) || isCancelled(),
+            abortSignal: generationSignal,
           },
         );
       } catch (e) {
@@ -468,6 +498,11 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       }
       if (result.skipped) {
         stopTypingSpinner();
+        return;
+      }
+      if (generationSignal.aborted) {
+        stopTypingSpinner();
+        await sendInterruptedReply({ sendToChat: false });
         return;
       }
       if (isCancelled()) {
@@ -499,6 +534,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
       );
       if (finalFormatted.trim()) {
         sendOrEditQueue = sendOrEditQueue.then(async () => {
+          if (generationSignal.aborted) return;
           try {
             await ctx.api.editMessageText(chatId, streamSentMessageId!, finalFormatted, { parse_mode: "HTML" });
           } catch (e: unknown) {
@@ -569,6 +605,11 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
     return;
   }
   if (await shouldAbortSend()) return;
+  if (generationSignal.aborted && interruptedReplyCallback) {
+    await interruptedReplyCallback({ sendToChat: false });
+    return;
+  }
+  if (generationSignal.aborted) return;
   if (isCancelled() && interruptedReplyCallback) {
     await interruptedReplyCallback({ sendToChat: true });
     return;
@@ -577,6 +618,7 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
 
   // Streaming path: first message already has up to 4096. Send overflow as continuation if needed; then we're done.
   if (streamSentMessageId !== null && chatId !== undefined) {
+    if (generationSignal.aborted) return;
     if (result.output_text.length > MAX_MESSAGE_TEXT_LENGTH) {
       await sendLongMessage(
         ctx.api,
@@ -616,5 +658,10 @@ export async function handleBotAiResponse(ctx: Context): Promise<void> {
   } else {
     const textToFormat = result.output_text.slice(0, MAX_MESSAGE_TEXT_LENGTH);
     await ctx.reply(textToFormat, replyOptions);
+  }
+  } finally {
+    if (threadControllers.get(threadKey) === generationController) {
+      threadControllers.delete(threadKey);
+    }
   }
 }

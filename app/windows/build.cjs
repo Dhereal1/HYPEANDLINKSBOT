@@ -11,7 +11,137 @@ const {
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
+const { spawn } = require("child_process");
 const { pathToFileURL } = require("url");
+
+const UPDATE_GITHUB_OWNER = "HyperlinksSpace";
+const UPDATE_GITHUB_REPO = "HyperlinksSpaceBot";
+const ZIP_LATEST_YML = "zip-latest.yml";
+
+function compareSemverLike(a, b) {
+  const pa = String(a || "0")
+    .split(".")
+    .map((x) => parseInt(x, 10) || 0);
+  const pb = String(b || "0")
+    .split(".")
+    .map((x) => parseInt(x, 10) || 0);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da < db) return -1;
+    if (da > db) return 1;
+  }
+  return 0;
+}
+
+function parseSimpleUpdateYml(text) {
+  const versionM = text.match(/^version:\s*(.+)$/m);
+  const version = versionM ? versionM[1].trim() : null;
+  const pathM = text.match(/^path:\s*(.+)$/m);
+  let fileName = pathM ? pathM[1].trim() : null;
+  if (!fileName) {
+    const urlM = text.match(/^\s*url:\s*(.+)$/m);
+    fileName = urlM ? urlM[1].trim() : null;
+  }
+  const shaM = text.match(/^sha512:\s*(.+)$/m);
+  const sha512 = shaM ? shaM[1].trim() : null;
+  const sizeM = text.match(/^\s*size:\s*(\d+)\s*$/m);
+  const size = sizeM ? parseInt(sizeM[1], 10) : null;
+  return { version, fileName, sha512, size };
+}
+
+function githubLatestAssetUrl(fileName) {
+  const enc = encodeURIComponent(fileName).replace(/%20/g, "%20");
+  return `https://github.com/${UPDATE_GITHUB_OWNER}/${UPDATE_GITHUB_REPO}/releases/latest/download/${enc}`;
+}
+
+async function downloadToFile(netFetch, url, destPath, onProgress) {
+  const res = await netFetch(url);
+  if (!res.ok) {
+    throw new Error(`Download failed ${res.status} ${url}`);
+  }
+  const total = parseInt(res.headers.get("content-length") || "0", 10) || 0;
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (onProgress) onProgress(buf.length, total || buf.length);
+    fs.writeFileSync(destPath, buf);
+    return;
+  }
+  const ws = fs.createWriteStream(destPath);
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        received += value.length;
+        if (!ws.write(Buffer.from(value))) {
+          await new Promise((res) => ws.once("drain", res));
+        }
+        if (onProgress) onProgress(received, total);
+      }
+    }
+  } finally {
+    await new Promise((resolve, reject) => {
+      ws.end((err) => (err ? reject(err) : resolve()));
+    });
+  }
+}
+
+function sha512Base64OfFile(filePath) {
+  const hash = crypto.createHash("sha512");
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest("base64");
+}
+
+function resolveZipAppContentRoot(extractDir, exeBaseName) {
+  const direct = path.join(extractDir, exeBaseName);
+  if (fs.existsSync(direct)) return extractDir;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(extractDir, { withFileTypes: true });
+  } catch (_) {
+    return null;
+  }
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const sub = path.join(extractDir, ent.name);
+    if (fs.existsSync(path.join(sub, exeBaseName))) return sub;
+  }
+  return null;
+}
+
+/** Remove obsolete dirs under installDir/versions/ (older than running app). Runs async after delay. */
+function scheduleVersionsFolderCleanup() {
+  if (isDev || !app.isPackaged || process.platform !== "win32") return;
+  const installDir = path.dirname(process.execPath);
+  const versionsRoot = path.join(installDir, "versions");
+  const current = app.getVersion();
+  setTimeout(() => {
+    try {
+      if (!fs.existsSync(versionsRoot)) return;
+      for (const name of fs.readdirSync(versionsRoot)) {
+        const full = path.join(versionsRoot, name);
+        let st;
+        try {
+          st = fs.statSync(full);
+        } catch (_) {
+          continue;
+        }
+        if (!st.isDirectory()) continue;
+        if (compareSemverLike(name, current) < 0) {
+          fs.rmSync(full, { recursive: true, force: true });
+          log(`[updater] removed old versions folder: ${name}`);
+        }
+      }
+    } catch (e) {
+      log(`[updater] versions cleanup: ${e?.message || e}`);
+    }
+  }, 5000);
+}
 
 const isDev = process.env.NODE_ENV === "development";
 const updaterMenuApi = {
@@ -202,22 +332,250 @@ function setupAutoUpdater() {
       error: (m) => log(`[updater] ${typeof m === "string" ? m : JSON.stringify(m)}`),
       debug: (m) => log(`[updater] ${typeof m === "string" ? m : JSON.stringify(m)}`),
     };
-    autoUpdater.autoDownload = true;
+
+    const useWinVersionsSidecar = process.platform === "win32";
+    let installUsesNsisFallback = false;
+    let zipPrepareInFlight = false;
+    let zipReadyVersion = null;
+    let zipStagingContentPath = null;
+
+    autoUpdater.autoDownload = !useWinVersionsSidecar;
     autoUpdater.autoInstallOnAppQuit = true;
-    // Explicit for Windows silent installs: relaunch app after installer completes.
     autoUpdater.autoRunAppAfterInstall = true;
-    log("[updater] initialized (provider: github, autoDownload=true, interactiveInstall=true)");
+    log(
+      `[updater] initialized (github, winVersions=${useWinVersionsSidecar}, autoDownload=${autoUpdater.autoDownload})`,
+    );
 
     let installRequested = false;
+
+    const syncZipReadyUi = (v) => {
+      if (!updateDialogState.window || updateDialogState.window.isDestroyed()) return;
+      updateDialogUi({
+        text: `Update ${v} is ready (under versions/). Click Install update.`,
+        percent: 100,
+        showProgress: true,
+        showActions: true,
+        installEnabled: true,
+      });
+    };
+
+    const tryBeginVersionsPrepare = async (info, opts) => {
+      if (!useWinVersionsSidecar) return;
+      const remoteV = info?.version;
+      if (!remoteV || compareSemverLike(remoteV, currentVersion) <= 0) return;
+      if (zipPrepareInFlight) return;
+      const installDir = path.dirname(process.execPath);
+      const exeBase = path.basename(process.execPath);
+      if (
+        zipReadyVersion === remoteV &&
+        zipStagingContentPath &&
+        fs.existsSync(path.join(zipStagingContentPath, exeBase))
+      ) {
+        syncZipReadyUi(remoteV);
+        manualDownloadInProgress = false;
+        return;
+      }
+      zipPrepareInFlight = true;
+      installUsesNsisFallback = false;
+      const uiManual = Boolean(opts?.uiManual);
+      const uiActive =
+        uiManual || (updateDialogState.window && !updateDialogState.window.isDestroyed());
+      const pushUi = (partial) => {
+        if (!uiActive) return;
+        updateDialogUi({
+          showProgress: true,
+          showActions: true,
+          installEnabled: false,
+          percent: 0,
+          text: "",
+          ...partial,
+        });
+      };
+      try {
+        const ymlUrl = githubLatestAssetUrl(ZIP_LATEST_YML);
+        const ymlRes = await net.fetch(ymlUrl);
+        if (!ymlRes.ok) throw new Error(`zip-latest.yml HTTP ${ymlRes.status}`);
+        const ymlText = await ymlRes.text();
+        const meta = parseSimpleUpdateYml(ymlText);
+        if (!meta.version || !meta.fileName || !meta.sha512) {
+          throw new Error("invalid zip-latest.yml");
+        }
+        if (compareSemverLike(meta.version, currentVersion) <= 0) {
+          throw new Error("zip manifest is not newer than current app");
+        }
+        if (meta.version !== remoteV) {
+          log(`[updater] zip-latest version ${meta.version} vs feed ${remoteV} (using zip manifest)`);
+        }
+
+        pushUi({ text: `Downloading ${meta.version}...`, percent: 0 });
+
+        const versionsRoot = path.join(installDir, "versions");
+        const versionDir = path.join(versionsRoot, meta.version);
+        const extractDir = path.join(versionDir, "extract");
+        try {
+          fs.rmSync(versionDir, { recursive: true, force: true });
+        } catch (_) {}
+        fs.mkdirSync(extractDir, { recursive: true });
+
+        const zipPath = path.join(versionDir, meta.fileName);
+        const zipUrl = githubLatestAssetUrl(meta.fileName);
+        await downloadToFile(
+          (u) => net.fetch(u),
+          zipUrl,
+          zipPath,
+          (received, total) => {
+            const pct = total > 0 ? (100 * received) / total : 0;
+            pushUi({
+              text: `Downloading ${meta.version}... ${total > 0 ? Math.round(pct) : 0}%`,
+              percent: pct,
+            });
+          },
+        );
+
+        const hash = sha512Base64OfFile(zipPath);
+        if (hash !== meta.sha512) throw new Error("zip sha512 mismatch");
+
+        pushUi({ text: `Unpacking to versions/${meta.version}/...`, percent: 100 });
+
+        const AdmZip = require("adm-zip");
+        const zip = new AdmZip(zipPath);
+        zip.extractAllTo(extractDir, true);
+
+        const contentRoot = resolveZipAppContentRoot(extractDir, exeBase);
+        if (!contentRoot) throw new Error("extracted update has no app executable");
+
+        try {
+          fs.unlinkSync(zipPath);
+        } catch (_) {}
+
+        zipStagingContentPath = contentRoot;
+        zipReadyVersion = meta.version;
+        manualDownloadInProgress = false;
+        log(`[updater] staged update at ${contentRoot}`);
+        syncZipReadyUi(meta.version);
+        if (!uiActive && process.platform === "win32" && Notification.isSupported()) {
+          try {
+            new Notification({
+              title: "Hyperlinks Space App",
+              body: `Update ${meta.version} is ready. Open Updates → Check for updates to install.`,
+            }).show();
+          } catch (_) {}
+        }
+      } catch (e) {
+        log(`[updater] versions sidecar failed: ${e?.message || e}`);
+        zipStagingContentPath = null;
+        zipReadyVersion = null;
+        installUsesNsisFallback = true;
+        pushUi({ text: "Using standard installer download...", percent: 0 });
+        try {
+          await autoUpdater.downloadUpdate();
+        } catch (e2) {
+          log(`[updater] NSIS fallback download failed: ${e2?.message || e2}`);
+          manualDownloadInProgress = false;
+          if (uiActive) {
+            openOrFocusUpdateDialog();
+            updateDialogUi({
+              text: `Update failed: ${e?.message || String(e)}`,
+              percent: 0,
+              showProgress: false,
+              showActions: true,
+              installEnabled: false,
+            });
+          }
+        }
+      } finally {
+        zipPrepareInFlight = false;
+      }
+    };
+
+    const applyVersionsStagedUpdate = () => {
+      const installDir = path.dirname(process.execPath);
+      const exeName = path.basename(process.execPath);
+      const planPath = path.join(app.getPath("temp"), `hsp-update-plan-${Date.now()}.json`);
+      const plan = {
+        stagingContent: zipStagingContentPath,
+        installDir,
+        exeName,
+        waitPid: process.pid,
+        appliedVersion: zipReadyVersion,
+      };
+      fs.writeFileSync(planPath, JSON.stringify(plan), "utf8");
+
+      const ps1Path = path.join(app.getPath("temp"), `hsp-apply-versions-${Date.now()}.ps1`);
+      const ps1Body = [
+        "param([string]$PlanPath)",
+        '$ErrorActionPreference = "Stop"',
+        "$plan = Get-Content -LiteralPath $PlanPath -Encoding UTF8 -Raw | ConvertFrom-Json",
+        "$deadline = (Get-Date).AddSeconds(120)",
+        "while ((Get-Process -Id $plan.waitPid -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) {",
+        "  Start-Sleep -Milliseconds 200",
+        "}",
+        "$src = $plan.stagingContent",
+        "$dst = $plan.installDir",
+        "Get-ChildItem -LiteralPath $src -Force | ForEach-Object {",
+        "  if ($_.Name -ne 'versions') {",
+        "    $target = Join-Path $dst $_.Name",
+        "    if ($_.PSIsContainer) {",
+        "      $p = Start-Process -FilePath robocopy.exe -ArgumentList @($_.FullName, $target, '/MIR', '/R:6', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS') -Wait -PassThru -NoNewWindow",
+        "      if ($p.ExitCode -gt 7) { exit 1 }",
+        "    } else {",
+        "      Copy-Item -LiteralPath $_.FullName -Destination $target -Force",
+        "    }",
+        "  }",
+        "}",
+        "$vdir = Join-Path $dst ('versions\\' + $plan.appliedVersion)",
+        "if (Test-Path -LiteralPath $vdir) { Remove-Item -LiteralPath $vdir -Recurse -Force }",
+        'Start-Process -FilePath (Join-Path $dst $plan.exeName)',
+        "try { Remove-Item -LiteralPath $PlanPath -Force } catch {}",
+        "",
+      ].join("\r\n");
+      fs.writeFileSync(ps1Path, ps1Body, "utf8");
+
+      const child = spawn(
+        "powershell.exe",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1Path, "-PlanPath", planPath],
+        { detached: true, stdio: "ignore", windowsHide: true },
+      );
+      child.unref();
+      if (!child.pid) {
+        throw new Error("failed to spawn update helper");
+      }
+    };
 
     const requestInstallNow = () => {
       installRequested = true;
       log("[updater] user accepted update install");
       closeUpdateDialog();
 
-      // Destroying windows triggers mainWindow.closed → app.quit() and window-all-closed → app.quit()
-      // before quitAndInstall runs, which races the NSIS installer and can leave a long "dead" period.
       suppressQuitForUpdateInstall = true;
+
+      const exeBase = path.basename(process.execPath);
+      const useVersionsApply =
+        useWinVersionsSidecar &&
+        zipStagingContentPath &&
+        zipReadyVersion &&
+        !installUsesNsisFallback &&
+        fs.existsSync(path.join(zipStagingContentPath, exeBase));
+
+      if (useVersionsApply) {
+        try {
+          applyVersionsStagedUpdate();
+        } catch (e) {
+          log(`[updater] applyVersionsStagedUpdate failed: ${e?.message || e}`);
+          suppressQuitForUpdateInstall = false;
+          installUsesNsisFallback = true;
+          void autoUpdater.downloadUpdate().catch(() => {});
+          return;
+        }
+        for (const win of BrowserWindow.getAllWindows()) {
+          try {
+            win.removeAllListeners("close");
+            win.destroy();
+          } catch (_) {}
+        }
+        app.quit();
+        return;
+      }
 
       try {
         if (process.platform === "win32" && Notification.isSupported()) {
@@ -229,7 +587,6 @@ function setupAutoUpdater() {
         }
       } catch (_) {}
 
-      // Ensure renderers release file locks before NSIS starts uninstall/install.
       for (const win of BrowserWindow.getAllWindows()) {
         try {
           win.removeAllListeners("close");
@@ -238,13 +595,11 @@ function setupAutoUpdater() {
       }
 
       try {
-        // isForceRunAfter=true: relaunch after install (matches NSIS runAfterFinish intent).
         log("[updater] invoking quitAndInstall(isSilent=false, isForceRunAfter=true)");
         autoUpdater.quitAndInstall(false, true);
       } catch (e) {
         log(`quitAndInstall failed: ${e?.message || e}`);
         suppressQuitForUpdateInstall = false;
-        // Fallback path: app quit still applies update because autoInstallOnAppQuit=true.
         app.quit();
       }
     };
@@ -252,6 +607,7 @@ function setupAutoUpdater() {
     autoUpdater.on("update-downloaded", () => {
       log("[updater] update-downloaded");
       manualDownloadInProgress = false;
+      installUsesNsisFallback = true;
       openOrFocusUpdateDialog();
       updateDialogUi({
         text: "Update is ready. Click Install update.",
@@ -271,18 +627,23 @@ function setupAutoUpdater() {
 
     autoUpdater.on("update-available", (info) => {
       log(`[updater] update-available version=${info?.version || "unknown"}`);
+      const wasManual = manualCheckInProgress;
       if (manualCheckInProgress) {
         manualCheckInProgress = false;
         manualDownloadInProgress = true;
-        // Custom window only (no native "Update found" dialog). Progress uses transferred/total when percent stays 0.
         openOrFocusUpdateDialog();
         updateDialogUi({
-          text: `Downloading version ${info?.version || "new"}...`,
+          text: useWinVersionsSidecar
+            ? `Preparing version ${info?.version || "new"} (versions/)...`
+            : `Downloading version ${info?.version || "new"}...`,
           percent: 0,
           showProgress: true,
           showActions: true,
           installEnabled: false,
         });
+      }
+      if (useWinVersionsSidecar) {
+        void tryBeginVersionsPrepare(info, { uiManual: wasManual });
       }
     });
 
@@ -340,6 +701,17 @@ function setupAutoUpdater() {
       try {
         log("[updater] manual check requested from menu");
         downloadProgressLoggedSample = false;
+        const exeBase = path.basename(process.execPath);
+        if (
+          useWinVersionsSidecar &&
+          zipReadyVersion &&
+          zipStagingContentPath &&
+          fs.existsSync(path.join(zipStagingContentPath, exeBase))
+        ) {
+          openOrFocusUpdateDialog();
+          syncZipReadyUi(zipReadyVersion);
+          return;
+        }
         manualCheckInProgress = true;
         manualDownloadInProgress = false;
         openOrFocusUpdateDialog();
@@ -395,6 +767,8 @@ function setupAutoUpdater() {
       log("[updater] check (window focus)");
       markAndCheck();
     });
+
+    scheduleVersionsFolderCleanup();
   } catch (e) {
     log(`autoUpdater failed: ${e?.message || e}`);
   }

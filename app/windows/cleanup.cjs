@@ -27,6 +27,7 @@ const devDir = path.join(buildDir, "dev");
 
 /** Required for electron-updater (GitHub) — must be uploaded next to the installer on each release. */
 const latestYmlName = "latest.yml";
+const zipLatestYmlName = "zip-latest.yml";
 const devArtifacts = [
   "win-unpacked",
   "builder-debug.yml",
@@ -39,6 +40,14 @@ function pickInstallerName() {
   if (candidates.length === 0) return null;
   // Prefer timestamped file if both legacy/static and stamped files exist.
   candidates.sort((a, b) => b.length - a.length || a.localeCompare(b));
+  return candidates[0];
+}
+
+function pickZipName() {
+  const files = fs.readdirSync(artifactsDir);
+  const candidates = files.filter((f) => /^HyperlinksSpaceApp_[\d.]+\.zip$/i.test(f));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.localeCompare(a));
   return candidates[0];
 }
 
@@ -111,6 +120,16 @@ function writeLatestYmlForExe(exePath, ymlPath) {
 
 if (fs.existsSync(exeDest) && !fs.existsSync(latestDest)) {
   writeLatestYmlForExe(exeDest, latestDest);
+}
+
+const zipName = pickZipName();
+const zipDest = zipName ? path.join(buildDir, zipName) : null;
+const zipLatestDest = path.join(buildDir, zipLatestYmlName);
+if (zipName) {
+  moveIfExists(path.join(artifactsDir, zipName), zipDest);
+}
+if (zipDest && fs.existsSync(zipDest)) {
+  writeLatestYmlForExe(zipDest, zipLatestDest);
 }
 
 // Move optional/debug artifacts into dev/

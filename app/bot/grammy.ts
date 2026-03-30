@@ -36,12 +36,16 @@ export function createBot(token: string): Bot {
 
   bot.on('message:text', async (ctx: Context) => {
     await handleUserUpsert(ctx);
-    await handleBotAiResponse(ctx);
+    void handleBotAiResponse(ctx).catch((err) => {
+      console.error('[bot][message:text]', err);
+    });
   });
 
   bot.on('message:caption', async (ctx: Context) => {
     await handleUserUpsert(ctx);
-    await handleBotAiResponse(ctx);
+    void handleBotAiResponse(ctx).catch((err) => {
+      console.error('[bot][message:caption]', err);
+    });
   });
 
   bot.catch((err) => {

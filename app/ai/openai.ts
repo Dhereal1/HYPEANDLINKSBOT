@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { TOKEN_INFO_OPENAI_PREFIX } from "./instructions.js";
 
 export type AiMode = "chat" | "token_info";
 
@@ -64,10 +65,7 @@ export async function callOpenAiChat(
     };
   }
 
-  const prefix =
-    mode === "token_info"
-      ? "You are a blockchain and token analyst. Answer clearly and briefly.\n\n"
-      : "";
+  const prefix = mode === "token_info" ? TOKEN_INFO_OPENAI_PREFIX : "";
 
   try {
     const response = await client.responses.create({
@@ -121,10 +119,7 @@ export async function callOpenAiChatStream(
     };
   }
 
-  const prefix =
-    mode === "token_info"
-      ? "You are a blockchain and token analyst. Answer clearly and briefly.\n\n"
-      : "";
+  const prefix = mode === "token_info" ? TOKEN_INFO_OPENAI_PREFIX : "";
 
   try {
     const stream = client.responses.stream({
@@ -132,31 +127,48 @@ export async function callOpenAiChatStream(
       ...(params.instructions ? { instructions: params.instructions } : {}),
       input: `${prefix}${trimmed}`,
     });
+    let abortRequested = false;
+    const requestAbort = (): void => {
+      if (abortRequested) return;
+      abortRequested = true;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (stream as any)?.abort?.();
+      } catch {
+        /* ignore */
+      }
+    };
 
     stream.on("response.output_text.delta", async (event: { snapshot?: string }) => {
       if (opts?.isCancelled && opts.isCancelled()) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (stream as any)?.abort?.();
-        } catch {
-          /* ignore */
-        }
+        requestAbort();
         return;
       }
       if (opts?.getAbortSignal && (await opts.getAbortSignal())) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (stream as any)?.abort?.();
-        } catch {
-          /* ignore */
-        }
+        requestAbort();
         return;
       }
       const text = event?.snapshot ?? "";
       if (text.length > 0) void Promise.resolve(onDelta(text));
     });
 
-    const response = await stream.finalResponse();
+    const abortWatchdog = setInterval(async () => {
+      if (abortRequested) return;
+      if (opts?.isCancelled && opts.isCancelled()) {
+        requestAbort();
+        return;
+      }
+      if (opts?.getAbortSignal && (await opts.getAbortSignal())) {
+        requestAbort();
+      }
+    }, 100);
+
+    let response: unknown;
+    try {
+      response = await stream.finalResponse();
+    } finally {
+      clearInterval(abortWatchdog);
+    }
     const r = response as any;
     let output_text = r.output_text;
     if (output_text == null || String(output_text).trim() === "") {

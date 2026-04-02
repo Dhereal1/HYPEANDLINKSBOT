@@ -10,16 +10,23 @@ dotenv.config({ path: path.join(cwd, ".env.local") });
 dotenv.config({ path: path.join(cwd, "app", ".env.local") });
 import { neon } from "@neondatabase/serverless";
 
-const connectionString = process.env.DATABASE_URL;
+type NeonSql = ReturnType<typeof neon>;
+let db: NeonSql | null = null;
 
-if (!connectionString) {
-  // Fail fast on the server side so misconfiguration is obvious in logs.
-  throw new Error(
-    "DATABASE_URL is not set. Configure it in ./app/.env for the current Neon branch.",
-  );
+export function getDb(): NeonSql {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is not set. Configure it in ./app/.env for the current Neon branch.",
+    );
+  }
+  if (!db) db = neon(connectionString);
+  return db;
 }
 
-export const sql = neon(connectionString);
+export function sql(...args: Parameters<NeonSql>): ReturnType<NeonSql> {
+  return getDb()(...args);
+}
 
 async function runSchemaMigrations() {
   // users table
@@ -130,4 +137,3 @@ export function ensureSchema(): Promise<void> {
 
 // Schema runs at deploy via `npm run db:migrate` in buildCommand. No schema work
 // in the request path — keeps /api/telegram and other routes fast (no 504).
-
